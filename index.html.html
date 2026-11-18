@@ -1,0 +1,2972 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ครัวคุณอิ่ม - ระบบจัดการเมนูและออเดอร์ประจำวัน</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Prompt & Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Firebase SDK (Compat for single-file HTML) -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Prompt', 'Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#fff7ed',
+                            100: '#ffedd5',
+                            200: '#fed7aa',
+                            300: '#fdba74',
+                            400: '#fb923c',
+                            500: '#f97316',
+                            600: '#ea580c',
+                            700: '#c2410c',
+                            800: '#9a3412',
+                            900: '#7c2d12',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-stone-50 text-stone-800 antialiased min-h-screen flex flex-col">
+
+    <!-- ========================================== -->
+    <!-- OWNER PIN LOCK SCREEN OVERLAY              -->
+    <!-- ========================================== -->
+    <div id="owner-pin-overlay" class="fixed inset-0 z-50 hidden items-center justify-center bg-stone-900/80 backdrop-blur-md p-4">
+        <div class="bg-white rounded-3xl max-w-sm w-full p-6 sm:p-7 shadow-2xl border border-stone-200 text-center space-y-5">
+            <div class="w-16 h-16 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center mx-auto shadow-inner">
+                <i data-lucide="shield-check" class="w-8 h-8"></i>
+            </div>
+            <div>
+                <span class="text-[11px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-stone-100 text-stone-600">Owner Mode</span>
+                <h2 class="text-xl font-bold text-stone-900 mt-2">เข้าสู่ระบบหลังร้าน</h2>
+                <p class="text-xs sm:text-sm text-stone-500 mt-1">กรุณากรอกรหัส PIN เจ้าของร้านเพื่อจัดการเมนูและออเดอร์</p>
+            </div>
+
+            <form onsubmit="verifyOwnerPin(event)" class="space-y-4">
+                <div>
+                    <input type="password" id="owner-pin-input" inputmode="numeric" maxlength="10" required placeholder="••••"
+                        class="w-full text-center tracking-[0.5em] text-2xl font-bold py-3 px-4 bg-stone-50 border border-stone-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500">
+                    <p id="pin-error-msg" class="hidden text-xs text-red-600 font-medium mt-1.5">รหัส PIN ไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง</p>
+                    <p class="text-[11px] text-stone-400 mt-2">รหัสเริ่มต้น: <strong class="text-stone-600">1234</strong> (เปลี่ยนได้ในตั้งค่าร้าน)</p>
+                </div>
+
+                <button type="submit" class="w-full py-3 px-4 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-semibold text-sm shadow-md shadow-brand-500/20 transition-all">
+                    ปลดล็อกเข้าใช้งาน
+                </button>
+            </form>
+
+            <div class="pt-2 border-t border-stone-100">
+                <button type="button" onclick="switchToCustomerMode()" class="text-xs text-stone-500 hover:text-brand-600 font-medium inline-flex items-center gap-1 transition-colors">
+                    <i data-lucide="utensils" class="w-3.5 h-3.5"></i>
+                    <span>สลับไปหน้าสั่งอาหารสำหรับลูกค้า →</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- HEADER & NAVIGATION                        -->
+    <!-- ========================================== -->
+    <header class="bg-white border-b border-stone-200 sticky top-0 z-30 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between py-3 gap-3">
+                <!-- Logo & Shop Info -->
+                <div class="flex items-center justify-between gap-2">
+                    <div id="header-brand-trigger" onclick="handleHeaderBrandClick()"
+                        class="group flex items-center gap-3 rounded-2xl p-1 -ml-1 transition-all cursor-pointer">
+                        <div id="header-logo-container" class="relative bg-brand-500 text-white w-11 h-11 rounded-xl shadow-md shadow-brand-500/20 flex items-center justify-center overflow-hidden shrink-0 transition-transform group-hover:scale-105">
+                            <span id="header-logo-emoji" class="text-2xl leading-none">🍳</span>
+                            <img id="header-logo-img" src="" alt="โลโก้ร้าน" class="hidden w-full h-full object-cover">
+                        </div>
+                        <div class="min-w-0">
+                            <div class="flex items-center gap-1.5">
+                                <h1 id="header-shop-name" class="text-lg sm:text-xl font-bold text-stone-900 tracking-tight truncate group-hover:text-brand-600 transition-colors">ครัวคุณอิ่ม</h1>
+                                <span id="header-edit-badge" class="owner-only opacity-70 group-hover:opacity-100 text-stone-400 group-hover:text-brand-500 transition-opacity bg-stone-100 group-hover:bg-brand-50 p-1 rounded-md">
+                                    <i data-lucide="pencil" class="w-3 h-3"></i>
+                                </span>
+                            </div>
+                            <p id="header-shop-subtitle" class="text-[11px] text-stone-500 truncate">ระบบจัดการเมนูและออเดอร์ประจำวัน</p>
+                        </div>
+                    </div>
+
+                    <!-- Connection Status Badge & Mobile Controls -->
+                    <div class="flex items-center gap-2">
+                        <span id="cloud-status-badge" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                            <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                            <span>กำลังเชื่อมต่อ Cloud...</span>
+                        </span>
+
+                        <div class="owner-only text-right sm:hidden">
+                            <span class="text-[10px] text-stone-400 block">ยอดขาย</span>
+                            <span id="mobile-daily-sales" class="text-xs font-bold text-brand-600">฿0</span>
+                        </div>
+                        <button onclick="openShopSettingsModal()" class="owner-only sm:hidden p-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 transition-colors" title="ตั้งค่าร้าน">
+                            <i data-lucide="settings" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- OWNER NAVIGATION TABS -->
+                <div id="owner-nav-container" class="owner-only flex items-center gap-2 self-stretch sm:self-auto">
+                    <nav class="flex-1 sm:flex-initial flex bg-stone-100 p-1 rounded-xl border border-stone-200/60 overflow-x-auto">
+                        <button onclick="switchTab('orders')" id="tab-btn-orders" class="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 sm:px-3.5 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all bg-white text-brand-600 shadow-sm whitespace-nowrap">
+                            <i data-lucide="clipboard-list" class="w-4 h-4"></i>
+                            <span>กระดานออเดอร์</span>
+                            <span id="active-orders-badge" class="bg-brand-100 text-brand-700 text-xs font-bold px-2 py-0.5 rounded-full">0</span>
+                        </button>
+                        <button onclick="switchTab('new-order')" id="tab-btn-new-order" class="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 sm:px-3.5 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all text-stone-600 hover:text-stone-900 whitespace-nowrap">
+                            <i data-lucide="plus-circle" class="w-4 h-4"></i>
+                            <span>รับออเดอร์</span>
+                        </button>
+                        <button onclick="switchTab('summary')" id="tab-btn-summary" class="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 sm:px-3.5 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all text-stone-600 hover:text-stone-900 whitespace-nowrap">
+                            <i data-lucide="bar-chart-3" class="w-4 h-4"></i>
+                            <span>สรุปยอดขาย</span>
+                        </button>
+                        <button onclick="switchTab('menu')" id="tab-btn-menu" class="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 sm:px-3.5 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all text-stone-600 hover:text-stone-900 whitespace-nowrap">
+                            <i data-lucide="book-open" class="w-4 h-4"></i>
+                            <span>เมนูประจำวัน</span>
+                        </button>
+                    </nav>
+
+                    <button onclick="openCustomerShareModal()" class="hidden md:inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-brand-200 bg-brand-50 hover:bg-brand-100 text-brand-700 text-xs font-semibold transition-all whitespace-nowrap">
+                        <i data-lucide="qr-code" class="w-4 h-4"></i>
+                        <span>ลิงก์สั่งอาหารลูกค้า</span>
+                    </button>
+
+                    <button onclick="openShopSettingsModal()" class="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-stone-200 bg-white hover:bg-stone-50 text-stone-700 text-xs font-medium shadow-2xs transition-all whitespace-nowrap">
+                        <i data-lucide="store" class="w-4 h-4 text-brand-500"></i>
+                        <span>ตั้งค่าร้าน</span>
+                    </button>
+                </div>
+
+                <!-- CUSTOMER NAVIGATION TABS -->
+                <div id="customer-nav-container" class="customer-only hidden flex items-center gap-2 self-stretch sm:self-auto">
+                    <nav class="flex-1 sm:flex-initial flex bg-stone-100 p-1 rounded-xl border border-stone-200/60">
+                        <button onclick="switchCustomerTab('order')" id="cust-tab-btn-order" class="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all bg-white text-brand-600 shadow-sm">
+                            <i data-lucide="utensils" class="w-4 h-4"></i>
+                            <span>สั่งอาหาร</span>
+                        </button>
+                        <button onclick="switchCustomerTab('track')" id="cust-tab-btn-track" class="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all text-stone-600 hover:text-stone-900">
+                            <i data-lucide="clock" class="w-4 h-4"></i>
+                            <span>ติดตามสถานะ</span>
+                            <span id="cust-my-orders-badge" class="hidden bg-brand-500 text-white text-[11px] font-bold px-2 py-0.5 rounded-full">0</span>
+                        </button>
+                    </nav>
+                </div>
+            </div>
+
+            <!-- OWNER DATE SELECTOR & ARCHIVE BAR -->
+            <div id="owner-date-bar" class="owner-only py-2.5 border-t border-stone-100 flex flex-wrap items-center justify-between gap-2.5">
+                <div class="flex flex-wrap items-center gap-2">
+                    <span class="text-xs font-medium text-stone-500 flex items-center gap-1">
+                        <i data-lucide="calendar" class="w-3.5 h-3.5 text-brand-500"></i>
+                        <span>ข้อมูลประจำวันที่:</span>
+                    </span>
+                    <input type="date" id="selected-date-picker" onchange="handleDateChange(this.value)" 
+                        class="px-3 py-1.5 bg-stone-50 border border-stone-200 rounded-xl text-xs sm:text-sm font-semibold text-stone-800 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500 cursor-pointer">
+                    
+                    <div class="flex items-center gap-1">
+                        <button type="button" onclick="selectRelativeDate(0)" id="btn-date-today" class="px-2.5 py-1.5 rounded-xl text-xs font-medium transition-colors bg-brand-500 text-white shadow-2xs">
+                            วันนี้
+                        </button>
+                        <button type="button" onclick="selectRelativeDate(-1)" id="btn-date-yesterday" class="px-2.5 py-1.5 rounded-xl text-xs font-medium transition-colors bg-stone-100 hover:bg-stone-200 text-stone-700">
+                            เมื่อวาน
+                        </button>
+                        <button type="button" onclick="openCustomerShareModal()" class="md:hidden px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-brand-50 text-brand-700 border border-brand-200 inline-flex items-center gap-1">
+                            <i data-lucide="qr-code" class="w-3.5 h-3.5"></i>
+                            <span>QR ลูกค้า</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div id="selected-date-thai-label" class="text-xs font-medium text-stone-600"></div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Historical Date Warning Banner (Owner Only) -->
+    <div id="archive-warning-banner" class="owner-only hidden bg-amber-50 border-b border-amber-200/80">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div class="flex items-center gap-2 text-amber-900 text-xs sm:text-sm">
+                <i data-lucide="history" class="w-4 h-4 text-amber-600 shrink-0"></i>
+                <span>คุณกำลังดูข้อมูลย้อนหลังของ <strong id="archive-banner-date"></strong></span>
+            </div>
+            <button onclick="selectRelativeDate(0)" class="self-start sm:self-auto px-3 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium transition-colors shadow-2xs">
+                กลับไปดูข้อมูลวันนี้ →
+            </button>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MAIN CONTENT CONTAINER                     -->
+    <!-- ========================================== -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+        <!-- ========================================================= -->
+        <!-- CUSTOMER VIEW (SHOWN ONLY WHEN ?mode=customer)            -->
+        <!-- ========================================================= -->
+        <section id="customer-portal-wrapper" class="customer-only hidden space-y-6">
+            
+            <!-- Customer Tab 1: Browse Menu & Place Order -->
+            <div id="cust-view-order" class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                <!-- Left: Today's Menu -->
+                <div class="lg:col-span-7 space-y-4">
+                    <div class="bg-white p-4 sm:p-5 rounded-2xl border border-stone-200/80 shadow-sm">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                            <div>
+                                <h2 class="text-lg font-bold text-stone-900">เมนูอาหารพร้อมเสิร์ฟวันนี้</h2>
+                                <p id="cust-today-date-label" class="text-xs text-stone-500">เลือกเมนูที่ต้องการสั่งด้านล่างได้เลย</p>
+                            </div>
+                            <div id="cust-menu-categories" class="flex flex-wrap gap-1.5"></div>
+                        </div>
+
+                        <div id="cust-selectable-menu-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+
+                        <div id="cust-no-menu-msg" class="hidden text-center py-12">
+                            <div class="w-14 h-14 bg-stone-100 text-stone-400 rounded-full flex items-center justify-center mx-auto mb-3">
+                                <i data-lucide="utensils-crossed" class="w-7 h-7"></i>
+                            </div>
+                            <p class="text-stone-600 font-medium text-sm">ขณะนี้ยังไม่มีเมนูที่เปิดขาย</p>
+                            <p class="text-stone-400 text-xs mt-1">กรุณารอสักครู่หรือสอบถามทางร้านโดยตรง</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right: Customer Checkout Form -->
+                <div class="lg:col-span-5 bg-white p-5 rounded-2xl border border-stone-200/80 shadow-sm lg:sticky lg:top-24 space-y-5">
+                    <div class="flex items-center justify-between border-b border-stone-100 pb-3">
+                        <h2 class="text-lg font-bold text-stone-900 flex items-center gap-2">
+                            <i data-lucide="shopping-bag" class="w-5 h-5 text-brand-500"></i>
+                            <span>รายการอาหารของคุณ</span>
+                        </h2>
+                        <button type="button" onclick="resetCustomerCart()" class="text-xs text-stone-400 hover:text-red-500 transition-colors">ล้างตะกร้า</button>
+                    </div>
+
+                    <form id="customer-order-form" onsubmit="submitCustomerOrder(event)" class="space-y-4">
+                        <div>
+                            <label for="cust-input-name" class="block text-sm font-medium text-stone-700 mb-1">ชื่อผู้สั่ง / เบอร์โทร / เลขโต๊ะ <span class="text-red-500">*</span></label>
+                            <div class="relative">
+                                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-stone-400">
+                                    <i data-lucide="user" class="w-4 h-4"></i>
+                                </div>
+                                <input type="text" id="cust-input-name" required placeholder="เช่น คุณแอน (089-xxx-xxxx) หรือ โต๊ะ 3" 
+                                    class="w-full pl-9 pr-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500 transition-all">
+                            </div>
+                        </div>
+
+                        <div>
+                            <label for="cust-input-time" class="block text-sm font-medium text-stone-700 mb-1">เวลาที่ต้องการรับ / ให้ส่งอาหาร <span class="text-red-500">*</span></label>
+                            <div class="flex flex-col sm:flex-row gap-2">
+                                <input type="time" id="cust-input-time" required 
+                                    class="sm:w-36 px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500">
+                                <div class="flex items-center gap-1.5 flex-1">
+                                    <button type="button" onclick="setCustomerQuickTime(15)" class="flex-1 py-2 px-2 bg-stone-100 hover:bg-brand-50 hover:text-brand-700 text-stone-700 rounded-xl text-xs font-medium transition-colors border border-stone-200/60">
+                                        รับทันที (~15น.)
+                                    </button>
+                                    <button type="button" onclick="setCustomerQuickTime(30)" class="flex-1 py-2 px-2 bg-stone-100 hover:bg-brand-50 hover:text-brand-700 text-stone-700 rounded-xl text-xs font-medium transition-colors border border-stone-200/60">
+                                        +30 นาที
+                                    </button>
+                                    <button type="button" onclick="setCustomerQuickTime(60)" class="flex-1 py-2 px-2 bg-stone-100 hover:bg-brand-50 hover:text-brand-700 text-stone-700 rounded-xl text-xs font-medium transition-colors border border-stone-200/60">
+                                        +1 ชม.
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-stone-700 mb-2">รายการที่เลือก</label>
+                            <div id="cust-cart-container" class="bg-stone-50 rounded-xl border border-stone-200/80 p-3 min-h-[110px] max-h-[250px] overflow-y-auto space-y-2"></div>
+                        </div>
+
+                        <div>
+                            <label for="cust-input-note" class="block text-sm font-medium text-stone-700 mb-1">หมายเหตุถึงร้าน (ถ้ามี)</label>
+                            <input type="text" id="cust-input-note" placeholder="เช่น ไม่เผ็ด, ไม่ใส่ผัก, สถานที่จัดส่ง" 
+                                class="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500 transition-all">
+                        </div>
+
+                        <div class="pt-3 border-t border-stone-200 space-y-3">
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm font-medium text-stone-600">จำนวนรวม (<span id="cust-cart-qty">0</span> รายการ)</span>
+                                <div class="text-right">
+                                    <span class="text-xs text-stone-400 block">ยอดชำระทั้งหมด</span>
+                                    <span id="cust-cart-price" class="text-2xl font-bold text-brand-600">฿0</span>
+                                </div>
+                            </div>
+
+                            <button type="submit" class="w-full py-3.5 px-4 bg-brand-500 hover:bg-brand-600 active:bg-brand-700 text-white font-semibold rounded-xl shadow-md shadow-brand-500/20 transition-all flex items-center justify-center gap-2">
+                                <i data-lucide="send" class="w-5 h-5"></i>
+                                <span>ยืนยันการสั่งอาหาร</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Customer Tab 2: Track My Orders Real-time -->
+            <div id="cust-view-track" class="hidden max-w-3xl mx-auto space-y-4">
+                <div class="bg-white p-4 sm:p-5 rounded-2xl border border-stone-200/80 shadow-sm flex items-center justify-between">
+                    <div>
+                        <h2 class="text-lg font-bold text-stone-900">สถานะออเดอร์ของคุณ</h2>
+                        <p class="text-xs text-stone-500">อัปเดตขั้นตอนการทำอาหารจากทางร้านแบบเรียลไทม์</p>
+                    </div>
+                    <button onclick="switchCustomerTab('order')" class="px-3.5 py-2 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-xs font-semibold shadow-2xs transition-colors">
+                        + สั่งอาหารเพิ่ม
+                    </button>
+                </div>
+
+                <div id="cust-tracked-orders-list" class="space-y-4"></div>
+
+                <div id="cust-no-tracked-orders" class="hidden bg-white rounded-2xl border border-stone-200 p-12 text-center">
+                    <div class="w-16 h-16 bg-stone-100 text-stone-400 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i data-lucide="receipt" class="w-8 h-8"></i>
+                    </div>
+                    <h3 class="text-base font-bold text-stone-800">คุณยังไม่มีรายการสั่งซื้อในวันนี้</h3>
+                    <p class="text-xs text-stone-500 mt-1 mb-5">เลือกเมนูอร่อยๆ จากหน้าร้านและกดสั่งอาหารได้เลยครับ</p>
+                    <button onclick="switchCustomerTab('order')" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-medium text-sm transition-all">
+                        <i data-lucide="utensils" class="w-4 h-4"></i>
+                        <span>ไปหน้าสั่งอาหาร</span>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========================================================= -->
+        <!-- OWNER VIEWS (HIDDEN IN CUSTOMER MODE)                     -->
+        <!-- ========================================================= -->
+        <div id="owner-portal-wrapper" class="owner-only">
+
+            <!-- TAB 1: ORDER TRACKING & STATUS BOARD -->
+            <section id="view-orders" class="space-y-6">
+                <!-- Summary Cards -->
+                <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                    <div class="bg-white p-4 rounded-2xl border border-stone-200/80 shadow-sm flex items-center gap-3.5">
+                        <div class="p-3 rounded-xl bg-amber-50 text-amber-600">
+                            <i data-lucide="clock" class="w-6 h-6"></i>
+                        </div>
+                        <div>
+                            <p class="text-xs sm:text-sm text-stone-500 font-medium">รอทำ / กำลังปรุง</p>
+                            <p id="stat-preparing" class="text-xl sm:text-2xl font-bold text-stone-900">0</p>
+                        </div>
+                    </div>
+                    <div class="bg-white p-4 rounded-2xl border border-stone-200/80 shadow-sm flex items-center gap-3.5">
+                        <div class="p-3 rounded-xl bg-blue-50 text-blue-600">
+                            <i data-lucide="bike" class="w-6 h-6"></i>
+                        </div>
+                        <div>
+                            <p class="text-xs sm:text-sm text-stone-500 font-medium">รอจัดส่ง / พร้อมส่ง</p>
+                            <p id="stat-ready" class="text-xl sm:text-2xl font-bold text-stone-900">0</p>
+                        </div>
+                    </div>
+                    <div class="bg-white p-4 rounded-2xl border border-stone-200/80 shadow-sm flex items-center gap-3.5">
+                        <div class="p-3 rounded-xl bg-emerald-50 text-emerald-600">
+                            <i data-lucide="check-circle-2" class="w-6 h-6"></i>
+                        </div>
+                        <div>
+                            <p class="text-xs sm:text-sm text-stone-500 font-medium">จัดส่งสำเร็จแล้ว</p>
+                            <p id="stat-completed" class="text-xl sm:text-2xl font-bold text-stone-900">0</p>
+                        </div>
+                    </div>
+                    <div class="bg-gradient-to-br from-brand-500 to-brand-600 p-4 rounded-2xl shadow-sm text-white flex items-center gap-3.5">
+                        <div class="p-3 rounded-xl bg-white/20 text-white">
+                            <i data-lucide="wallet" class="w-6 h-6"></i>
+                        </div>
+                        <div>
+                            <p class="text-xs sm:text-sm text-brand-100 font-medium">ยอดขายรวมวันที่เลือก</p>
+                            <p id="stat-revenue" class="text-xl sm:text-2xl font-bold">฿0</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Filter & Action Toolbar -->
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-stone-200/80 shadow-sm">
+                    <div class="flex flex-wrap items-center gap-1.5" id="order-filters">
+                        <button onclick="setOrderFilter('active')" data-filter="active" class="filter-btn px-3.5 py-1.5 rounded-xl text-sm font-medium bg-stone-900 text-white transition-all">
+                            กำลังดำเนินการ
+                        </button>
+                        <button onclick="setOrderFilter('all')" data-filter="all" class="filter-btn px-3.5 py-1.5 rounded-xl text-sm font-medium text-stone-600 hover:bg-stone-100 transition-all">
+                            ทั้งหมด
+                        </button>
+                        <button onclick="setOrderFilter('completed')" data-filter="completed" class="filter-btn px-3.5 py-1.5 rounded-xl text-sm font-medium text-stone-600 hover:bg-stone-100 transition-all">
+                            จัดส่งสำเร็จ
+                        </button>
+                        <button onclick="setOrderFilter('cancelled')" data-filter="cancelled" class="filter-btn px-3.5 py-1.5 rounded-xl text-sm font-medium text-stone-600 hover:bg-stone-100 transition-all">
+                            ยกเลิก
+                        </button>
+                    </div>
+
+                    <div class="flex items-center gap-2 self-end sm:self-auto">
+                        <button onclick="clearCompletedOrders()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium text-stone-600 hover:text-red-600 hover:bg-red-50 border border-stone-200 transition-all">
+                            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                            <span>ล้างออเดอร์ที่เสร็จสิ้น</span>
+                        </button>
+                        <button onclick="switchTab('new-order')" class="flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-sm font-medium bg-brand-500 hover:bg-brand-600 text-white shadow-sm transition-all">
+                            <i data-lucide="plus" class="w-4 h-4"></i>
+                            <span>รับออเดอร์</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Orders Grid -->
+                <div id="orders-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+
+                <!-- Empty State for Orders -->
+                <div id="orders-empty-state" class="hidden bg-white rounded-2xl border border-stone-200 p-12 text-center">
+                    <div class="w-16 h-16 bg-stone-100 text-stone-400 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i data-lucide="clipboard-x" class="w-8 h-8"></i>
+                    </div>
+                    <h3 class="text-lg font-semibold text-stone-800 mb-1">ไม่มีรายการออเดอร์ในหมวดนี้</h3>
+                    <p class="text-sm text-stone-500 mb-5">รับออเดอร์หน้าร้าน หรือแชร์ลิงก์ให้ลูกค้าสั่งอาหารผ่านมือถือได้เลย</p>
+                    <div class="flex flex-wrap items-center justify-center gap-2.5">
+                        <button onclick="switchTab('new-order')" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-medium text-sm transition-all shadow-sm">
+                            <i data-lucide="plus-circle" class="w-4 h-4"></i>
+                            <span>สร้างออเดอร์ใหม่</span>
+                        </button>
+                        <button onclick="openCustomerShareModal()" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-800 font-medium text-sm transition-all">
+                            <i data-lucide="qr-code" class="w-4 h-4 text-brand-600"></i>
+                            <span>เปิด QR Code ให้ลูกค้าสั่ง</span>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 2: CREATE NEW ORDER (POS MODE) -->
+            <section id="view-new-order" class="hidden">
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                    <div class="lg:col-span-7 space-y-4">
+                        <div class="bg-white p-4 sm:p-5 rounded-2xl border border-stone-200/80 shadow-sm">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                                <div>
+                                    <h2 class="text-lg font-bold text-stone-900">เลือกเมนูอาหารประจำวัน</h2>
+                                    <p class="text-xs text-stone-500">แสดงเฉพาะเมนูที่เปิดขายในวันนี้</p>
+                                </div>
+                                <div id="order-menu-categories" class="flex flex-wrap gap-1.5"></div>
+                            </div>
+
+                            <div id="selectable-menu-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+
+                            <div id="no-available-menu-msg" class="hidden text-center py-10">
+                                <p class="text-stone-500 text-sm mb-3">ไม่มีเมนูที่เปิดขายในขณะนี้</p>
+                                <button onclick="switchTab('menu')" class="text-brand-600 font-medium text-sm hover:underline">ไปที่หน้าจัดการเมนูเพื่อเปิดขายเมนู →</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="lg:col-span-5 bg-white p-5 rounded-2xl border border-stone-200/80 shadow-sm lg:sticky lg:top-24 space-y-5">
+                        <div class="flex items-center justify-between border-b border-stone-100 pb-3">
+                            <h2 class="text-lg font-bold text-stone-900 flex items-center gap-2">
+                                <i data-lucide="shopping-bag" class="w-5 h-5 text-brand-500"></i>
+                                <span>สรุปรายการสั่งซื้อ (หน้าร้าน)</span>
+                            </h2>
+                            <button type="button" onclick="resetOrderForm()" class="text-xs text-stone-400 hover:text-red-500 transition-colors">ล้างรายการ</button>
+                        </div>
+
+                        <form id="new-order-form" onsubmit="submitNewOrder(event)" class="space-y-4">
+                            <div>
+                                <label for="customer-name" class="block text-sm font-medium text-stone-700 mb-1">ชื่อลูกค้า / โต๊ะ <span class="text-red-500">*</span></label>
+                                <div class="relative">
+                                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-stone-400">
+                                        <i data-lucide="user" class="w-4 h-4"></i>
+                                    </div>
+                                    <input type="text" id="customer-name" required placeholder="เช่น คุณสมชาย, โต๊ะ 4, พี่แอน (LINE)" 
+                                        class="w-full pl-9 pr-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500 transition-all">
+                                </div>
+                            </div>
+
+                            <div>
+                                <label for="delivery-time" class="block text-sm font-medium text-stone-700 mb-1">เวลาที่ต้องการให้ส่งอาหาร <span class="text-red-500">*</span></label>
+                                <div class="flex flex-col sm:flex-row gap-2">
+                                    <input type="time" id="delivery-time" required 
+                                        class="sm:w-36 px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500">
+                                    <div class="flex items-center gap-1.5 flex-1">
+                                        <button type="button" onclick="setQuickTime(0)" class="flex-1 py-2 px-2 bg-stone-100 hover:bg-brand-50 hover:text-brand-700 text-stone-700 rounded-xl text-xs font-medium transition-colors border border-stone-200/60">
+                                            ส่งทันที
+                                        </button>
+                                        <button type="button" onclick="setQuickTime(30)" class="flex-1 py-2 px-2 bg-stone-100 hover:bg-brand-50 hover:text-brand-700 text-stone-700 rounded-xl text-xs font-medium transition-colors border border-stone-200/60">
+                                            +30 นาที
+                                        </button>
+                                        <button type="button" onclick="setQuickTime(60)" class="flex-1 py-2 px-2 bg-stone-100 hover:bg-brand-50 hover:text-brand-700 text-stone-700 rounded-xl text-xs font-medium transition-colors border border-stone-200/60">
+                                            +1 ชม.
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-stone-700 mb-2">รายการอาหารที่เลือก</label>
+                                <div id="cart-items-container" class="bg-stone-50 rounded-xl border border-stone-200/80 p-3 min-h-[120px] max-h-[260px] overflow-y-auto space-y-2"></div>
+                            </div>
+
+                            <div>
+                                <label for="order-note" class="block text-sm font-medium text-stone-700 mb-1">หมายเหตุเพิ่มเติม</label>
+                                <input type="text" id="order-note" placeholder="เช่น ไม่เผ็ด, แยกน้ำซุป, ขอช้อนส้อม 2 ชุด" 
+                                    class="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500 transition-all">
+                            </div>
+
+                            <div class="pt-3 border-t border-stone-200 space-y-3">
+                                <div class="bg-stone-50 px-3 py-2 rounded-xl border border-stone-200/60 flex items-center justify-between text-xs">
+                                    <span class="text-stone-500">บันทึกเข้าวันที่:</span>
+                                    <span id="new-order-target-date" class="font-bold text-stone-800"></span>
+                                </div>
+
+                                <div class="flex items-center justify-between">
+                                    <span class="text-sm font-medium text-stone-600">จำนวนรวม (<span id="cart-total-qty">0</span> รายการ)</span>
+                                    <div class="text-right">
+                                        <span class="text-xs text-stone-400 block">ยอดรวมสุทธิ</span>
+                                        <span id="cart-total-price" class="text-2xl font-bold text-brand-600">฿0</span>
+                                    </div>
+                                </div>
+
+                                <button type="submit" class="w-full py-3 px-4 bg-brand-500 hover:bg-brand-600 active:bg-brand-700 text-white font-semibold rounded-xl shadow-md shadow-brand-500/20 transition-all flex items-center justify-center gap-2">
+                                    <i data-lucide="check-circle" class="w-5 h-5"></i>
+                                    <span>บันทึกออเดอร์เข้าครัว</span>
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 3: DAILY SALES & MENU SUMMARY -->
+            <section id="view-summary" class="hidden space-y-6">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 sm:p-5 rounded-2xl border border-stone-200/80 shadow-sm">
+                    <div>
+                        <h2 class="text-lg sm:text-xl font-bold text-stone-900 flex items-center gap-2">
+                            <i data-lucide="pie-chart" class="w-5 h-5 text-brand-500"></i>
+                            <span>สรุปยอดขายและรายการอาหาร</span>
+                        </h2>
+                        <p class="text-xs sm:text-sm text-stone-500 mt-0.5">
+                            ข้อมูลประจำ <span id="summary-date-subtitle" class="font-semibold text-brand-600"></span> (ไม่รวมออเดอร์ที่ยกเลิก)
+                        </p>
+                    </div>
+                    <button onclick="exportDailyCSV()" class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium shadow-sm transition-all self-start sm:self-auto">
+                        <i data-lucide="download" class="w-4 h-4"></i>
+                        <span>ส่งออกรายงาน (Export CSV)</span>
+                    </button>
+                </div>
+
+                <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                    <div class="bg-gradient-to-br from-brand-500 to-brand-600 p-4 sm:p-5 rounded-2xl shadow-sm text-white">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs sm:text-sm text-brand-100 font-medium">ยอดขายรวมทั้งหมด</span>
+                            <div class="p-2 rounded-lg bg-white/20"><i data-lucide="banknote" class="w-4 h-4"></i></div>
+                        </div>
+                        <p id="sum-kpi-revenue" class="text-2xl sm:text-3xl font-bold">฿0</p>
+                    </div>
+
+                    <div class="bg-white p-4 sm:p-5 rounded-2xl border border-stone-200/80 shadow-sm">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs sm:text-sm text-stone-500 font-medium">จำนวนออเดอร์</span>
+                            <div class="p-2 rounded-lg bg-blue-50 text-blue-600"><i data-lucide="receipt" class="w-4 h-4"></i></div>
+                        </div>
+                        <p id="sum-kpi-orders" class="text-2xl sm:text-3xl font-bold text-stone-900">0 <span class="text-sm font-normal text-stone-400">บิล</span></p>
+                    </div>
+
+                    <div class="bg-white p-4 sm:p-5 rounded-2xl border border-stone-200/80 shadow-sm">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs sm:text-sm text-stone-500 font-medium">จำนวนอาหารที่ขายได้</span>
+                            <div class="p-2 rounded-lg bg-amber-50 text-amber-600"><i data-lucide="utensils-crossed" class="w-4 h-4"></i></div>
+                        </div>
+                        <p id="sum-kpi-items" class="text-2xl sm:text-3xl font-bold text-stone-900">0 <span class="text-sm font-normal text-stone-400">จาน/กล่อง</span></p>
+                    </div>
+
+                    <div class="bg-white p-4 sm:p-5 rounded-2xl border border-stone-200/80 shadow-sm">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs sm:text-sm text-stone-500 font-medium">เมนูขายดีอันดับ 1</span>
+                            <div class="p-2 rounded-lg bg-emerald-50 text-emerald-600"><i data-lucide="award" class="w-4 h-4"></i></div>
+                        </div>
+                        <p id="sum-kpi-top-item" class="text-base sm:text-lg font-bold text-stone-900 truncate">-</p>
+                        <p id="sum-kpi-top-qty" class="text-xs text-emerald-600 font-medium mt-0.5">ยังไม่มีข้อมูล</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                    <div class="lg:col-span-7 bg-white rounded-2xl border border-stone-200/80 shadow-sm overflow-hidden">
+                        <div class="p-4 sm:p-5 border-b border-stone-100 flex items-center justify-between">
+                            <div>
+                                <h3 class="text-base sm:text-lg font-bold text-stone-900">สรุปยอดสั่งแยกตามรายการอาหาร</h3>
+                                <p class="text-xs text-stone-500">เรียงลำดับตามจำนวนที่ลูกค้าสั่งมากที่สุดในวันที่เลือก</p>
+                            </div>
+                            <span id="summary-menu-types-count" class="text-xs font-semibold px-2.5 py-1 rounded-full bg-stone-100 text-stone-700">0 เมนู</span>
+                        </div>
+
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-stone-50/80 border-b border-stone-200/80 text-xs font-semibold text-stone-500 uppercase">
+                                        <th class="py-3 px-4">รายการอาหาร</th>
+                                        <th class="py-3 px-3 text-right">ราคา/หน่วย</th>
+                                        <th class="py-3 px-3 text-center">จำนวนที่สั่ง</th>
+                                        <th class="py-3 px-4 text-right">ยอดเงินรวม</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="menu-breakdown-tbody" class="divide-y divide-stone-100 text-sm"></tbody>
+                                <tfoot id="menu-breakdown-tfoot" class="bg-stone-50 border-t border-stone-200 font-bold text-stone-900 text-sm hidden">
+                                    <tr>
+                                        <td colspan="2" class="py-3.5 px-4 text-right text-stone-600">รวมทั้งหมด</td>
+                                        <td id="tfoot-total-qty" class="py-3.5 px-3 text-center text-brand-600">0</td>
+                                        <td id="tfoot-total-revenue" class="py-3.5 px-4 text-right text-brand-600 text-base">฿0</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="lg:col-span-5 bg-white rounded-2xl border border-stone-200/80 shadow-sm overflow-hidden">
+                        <div class="p-4 sm:p-5 border-b border-stone-100">
+                            <h3 class="text-base sm:text-lg font-bold text-stone-900 flex items-center gap-2">
+                                <i data-lucide="calendar-days" class="w-5 h-5 text-brand-500"></i>
+                                <span>ประวัติยอดขายรายวันย้อนหลัง</span>
+                            </h3>
+                            <p class="text-xs text-stone-500 mt-0.5">คลิกที่วันที่ต้องการเพื่อดูรายละเอียดออเดอร์และเมนูของวันนั้น</p>
+                        </div>
+
+                        <div class="overflow-x-auto max-h-[480px] overflow-y-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead class="sticky top-0 bg-stone-50 border-b border-stone-200/80 text-xs font-semibold text-stone-500">
+                                    <tr>
+                                        <th class="py-3 px-4">วันที่</th>
+                                        <th class="py-3 px-2 text-center">ออเดอร์</th>
+                                        <th class="py-3 px-2 text-center">จาน/กล่อง</th>
+                                        <th class="py-3 px-4 text-right">ยอดขายรวม</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="daily-history-tbody" class="divide-y divide-stone-100 text-sm"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 4: DAILY MENU MANAGEMENT -->
+            <section id="view-menu" class="hidden space-y-6">
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                    <div class="lg:col-span-4 bg-white p-5 rounded-2xl border border-stone-200/80 shadow-sm lg:sticky lg:top-24">
+                        <h2 class="text-lg font-bold text-stone-900 mb-1 flex items-center gap-2">
+                            <i data-lucide="plus-square" class="w-5 h-5 text-brand-500"></i>
+                            <span>เพิ่มเมนูอาหารใหม่</span>
+                        </h2>
+                        <p class="text-xs text-stone-500 mb-4">เพิ่มรายการอาหารสำหรับขายประจำวัน (ซิงค์ถึงหน้าลูกค้าทันที)</p>
+
+                        <form id="add-menu-form" onsubmit="handleAddMenu(event)" class="space-y-4">
+                            <div>
+                                <label for="menu-name" class="block text-sm font-medium text-stone-700 mb-1">ชื่อเมนูอาหาร <span class="text-red-500">*</span></label>
+                                <input type="text" id="menu-name" required placeholder="เช่น ข้าวหมูทอดกระเทียม" 
+                                    class="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500">
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label for="menu-price" class="block text-sm font-medium text-stone-700 mb-1">ราคา (บาท) <span class="text-red-500">*</span></label>
+                                    <input type="number" id="menu-price" required min="1" step="1" placeholder="60" 
+                                        class="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500">
+                                </div>
+                                <div>
+                                    <label for="menu-category" class="block text-sm font-medium text-stone-700 mb-1">หมวดหมู่</label>
+                                    <select id="menu-category" class="w-full px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500">
+                                        <option value="อาหารจานเดียว">อาหารจานเดียว</option>
+                                        <option value="กับข้าว">กับข้าว</option>
+                                        <option value="ของทานเล่น">ของทานเล่น</option>
+                                        <option value="เครื่องดื่ม">เครื่องดื่ม</option>
+                                        <option value="ของหวาน">ของหวาน</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="flex items-center justify-between pt-1">
+                                <span class="text-sm text-stone-700 font-medium">เปิดขายวันนี้ทันที</span>
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" id="menu-available" checked class="sr-only peer">
+                                    <div class="w-11 h-6 bg-stone-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-stone-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+                                </label>
+                            </div>
+
+                            <button type="submit" class="w-full py-2.5 px-4 bg-stone-900 hover:bg-stone-800 text-white font-medium rounded-xl text-sm transition-all flex items-center justify-center gap-2 shadow-sm">
+                                <i data-lucide="plus" class="w-4 h-4"></i>
+                                <span>เพิ่มลงรายการเมนู</span>
+                            </button>
+                        </form>
+                    </div>
+
+                    <div class="lg:col-span-8 bg-white p-5 rounded-2xl border border-stone-200/80 shadow-sm space-y-4">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-stone-100 pb-4">
+                            <div>
+                                <h2 class="text-lg font-bold text-stone-900">รายการเมนูทั้งหมด (<span id="total-menu-count">0</span>)</h2>
+                                <p class="text-xs text-stone-500">เปิด/ปิดสถานะเมนูที่ทำในแต่ละวัน แก้ไขราคา หรือลบเมนู</p>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button onclick="setAllMenuAvailability(true)" class="px-3 py-1.5 rounded-xl text-xs font-medium bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors">
+                                    เปิดขายทั้งหมด
+                                </button>
+                                <button onclick="setAllMenuAvailability(false)" class="px-3 py-1.5 rounded-xl text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200 transition-colors">
+                                    ปิดทั้งหมด
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="relative">
+                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-stone-400">
+                                <i data-lucide="search" class="w-4 h-4"></i>
+                            </div>
+                            <input type="text" id="menu-search-input" oninput="renderMenuManagement()" placeholder="ค้นหาชื่อเมนูอาหาร..." 
+                                class="w-full pl-9 pr-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500">
+                        </div>
+
+                        <div id="menu-management-list" class="divide-y divide-stone-100"></div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+    </main>
+
+    <!-- ========================================== -->
+    <!-- MODAL: CUSTOMER LINK & QR CODE SHARE       -->
+    <!-- ========================================== -->
+    <div id="customer-share-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-stone-900/50 backdrop-blur-xs p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-stone-200 space-y-5 text-center">
+            <div class="flex items-center justify-between border-b border-stone-100 pb-3 text-left">
+                <div class="flex items-center gap-2">
+                    <div class="p-2 rounded-xl bg-brand-50 text-brand-600">
+                        <i data-lucide="qr-code" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-base font-bold text-stone-900">ลิงก์และ QR Code สำหรับลูกค้า</h3>
+                        <p class="text-xs text-stone-500">ลูกค้าจะเห็นเฉพาะหน้าสั่งอาหารและติดตามคิว</p>
+                    </div>
+                </div>
+                <button onclick="closeCustomerShareModal()" class="text-stone-400 hover:text-stone-600 p-1 rounded-lg">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <!-- QR Code Image -->
+            <div class="bg-stone-50 p-4 rounded-2xl border border-stone-200/80 inline-flex flex-col items-center justify-center mx-auto">
+                <img id="customer-qr-image" src="" alt="QR Code สั่งอาหาร" class="w-44 h-44 rounded-xl bg-white p-2 border border-stone-100 shadow-2xs"
+                    onerror="this.src='https://placehold.co/200x200/ffffff/333333?text=QR+Menu'">
+                <span id="qr-shop-caption" class="text-xs font-bold text-stone-800 mt-2">สแกนเพื่อสั่งอาหารออนไลน์</span>
+            </div>
+
+            <!-- Copyable URL -->
+            <div class="text-left space-y-1.5">
+                <label class="block text-xs font-medium text-stone-600">ลิงก์สั่งอาหารสำหรับส่งให้ลูกค้า (LINE / Facebook):</label>
+                <div class="flex gap-2">
+                    <input type="text" id="customer-share-url-input" readonly
+                        class="flex-1 px-3 py-2 bg-stone-100 border border-stone-200 rounded-xl text-xs text-stone-700 font-mono select-all focus:outline-none">
+                    <button type="button" onclick="copyCustomerShareUrl()" class="px-3.5 py-2 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-xs font-semibold shrink-0 transition-colors flex items-center gap-1">
+                        <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                        <span>คัดลอก</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="bg-emerald-50 border border-emerald-200/80 rounded-xl p-3 text-left text-xs text-emerald-900 space-y-1">
+                <p class="font-semibold flex items-center gap-1.5">
+                    <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-600 shrink-0"></i>
+                    <span>เชื่อมต่อฐานข้อมูลออนไลน์อัตโนมัติแล้ว</span>
+                </p>
+                <p class="text-emerald-800/90 leading-relaxed">
+                    เมื่อนำไฟล์เว็บนี้ขึ้น Hosting (เช่น Netlify หรือ Vercel) ลูกค้าสามารถสแกน QR Code หรือกดลิงก์เพื่อสั่งอาหารเข้ามายัง iPad และโทรศัพท์ทุกเครื่องของร้านได้ทันที
+                </p>
+            </div>
+
+            <div class="flex gap-2 pt-1">
+                <button type="button" onclick="previewCustomerMode()" class="flex-1 py-2.5 px-3 rounded-xl border border-stone-200 hover:bg-stone-50 text-stone-700 text-xs font-semibold transition-colors">
+                    เปิดดูตัวอย่างหน้าลูกค้า
+                </button>
+                <button type="button" onclick="closeCustomerShareModal()" class="flex-1 py-2.5 px-3 rounded-xl bg-stone-900 hover:bg-stone-800 text-white text-xs font-semibold transition-colors">
+                    ปิดหน้าต่าง
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MODAL: EDIT MENU ITEM                      -->
+    <!-- ========================================== -->
+    <div id="edit-menu-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-stone-900/50 backdrop-blur-xs p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-stone-200 space-y-4">
+            <div class="flex items-center justify-between border-b border-stone-100 pb-3">
+                <h3 class="text-lg font-bold text-stone-900">แก้ไขข้อมูลเมนูอาหาร</h3>
+                <button onclick="closeEditModal()" class="text-stone-400 hover:text-stone-600 p-1 rounded-lg">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <form id="edit-menu-form" onsubmit="saveEditedMenu(event)" class="space-y-4">
+                <input type="hidden" id="edit-menu-id">
+                <div>
+                    <label class="block text-sm font-medium text-stone-700 mb-1">ชื่อเมนูอาหาร</label>
+                    <input type="text" id="edit-menu-name" required class="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-sm font-medium text-stone-700 mb-1">ราคา (บาท)</label>
+                        <input type="number" id="edit-menu-price" required min="1" class="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-stone-700 mb-1">หมวดหมู่</label>
+                        <select id="edit-menu-category" class="w-full px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500">
+                            <option value="อาหารจานเดียว">อาหารจานเดียว</option>
+                            <option value="กับข้าว">กับข้าว</option>
+                            <option value="ของทานเล่น">ของทานเล่น</option>
+                            <option value="เครื่องดื่ม">เครื่องดื่ม</option>
+                            <option value="ของหวาน">ของหวาน</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-2 pt-3">
+                    <button type="button" onclick="closeEditModal()" class="px-4 py-2 rounded-xl text-sm font-medium text-stone-600 hover:bg-stone-100">ยกเลิก</button>
+                    <button type="submit" class="px-5 py-2 rounded-xl text-sm font-medium bg-brand-500 hover:bg-brand-600 text-white shadow-sm">บันทึกการแก้ไข</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MODAL: SHOP SETTINGS, PIN & FIREBASE CLOUD -->
+    <!-- ========================================== -->
+    <div id="shop-settings-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-stone-900/50 backdrop-blur-xs p-4 overflow-y-auto">
+        <div class="bg-white rounded-2xl max-w-xl w-full p-5 sm:p-6 shadow-xl border border-stone-200 space-y-5 my-auto max-h-[92vh] overflow-y-auto">
+            <div class="flex items-center justify-between border-b border-stone-100 pb-3">
+                <div class="flex items-center gap-2">
+                    <div class="p-2 rounded-xl bg-brand-50 text-brand-600">
+                        <i data-lucide="store" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-bold text-stone-900">ตั้งค่าข้อมูลร้านค้า & ระบบออนไลน์</h3>
+                        <p class="text-xs text-stone-500">ปรับแต่งชื่อร้าน โลโก้ รหัสผ่าน และฐานข้อมูล Firebase</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeShopSettingsModal()" class="text-stone-400 hover:text-stone-600 p-1.5 rounded-xl hover:bg-stone-100 transition-colors">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <form id="shop-settings-form" onsubmit="saveShopSettings(event)" class="space-y-4">
+                <!-- Live Preview Card -->
+                <div class="bg-stone-50 p-3.5 rounded-2xl border border-stone-200/80 flex items-center gap-3.5">
+                    <div id="preview-logo-box" class="w-14 h-14 rounded-2xl bg-brand-500 text-white flex items-center justify-center shadow-md overflow-hidden shrink-0">
+                        <span id="preview-logo-emoji" class="text-3xl leading-none">🍳</span>
+                        <img id="preview-logo-img" src="" alt="ตัวอย่างโลโก้" class="hidden w-full h-full object-cover">
+                    </div>
+                    <div class="min-w-0 flex-1">
+                        <span class="text-[10px] font-semibold uppercase tracking-wider text-stone-400 block">ตัวอย่างการแสดงผล</span>
+                        <h4 id="preview-shop-name" class="text-base sm:text-lg font-bold text-stone-900 truncate">ครัวคุณอิ่ม</h4>
+                        <p id="preview-shop-subtitle" class="text-xs text-stone-500 truncate">ระบบจัดการเมนูและออเดอร์ประจำวัน</p>
+                    </div>
+                </div>
+
+                <!-- Shop Name & Subtitle -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label for="setting-shop-name" class="block text-sm font-medium text-stone-700 mb-1">ชื่อร้านอาหาร <span class="text-red-500">*</span></label>
+                        <input type="text" id="setting-shop-name" required maxlength="50" oninput="updateSettingsLivePreview()"
+                            class="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500">
+                    </div>
+                    <div>
+                        <label for="setting-shop-subtitle" class="block text-sm font-medium text-stone-700 mb-1">คำโปรย / สโลแกนร้าน</label>
+                        <input type="text" id="setting-shop-subtitle" maxlength="80" oninput="updateSettingsLivePreview()"
+                            class="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500">
+                    </div>
+                </div>
+
+                <!-- Logo Customization -->
+                <div class="space-y-3 pt-1">
+                    <label class="block text-sm font-medium text-stone-700">โลโก้ร้านค้า</label>
+                    <div class="flex flex-wrap items-center gap-2.5">
+                        <label for="setting-logo-upload" class="cursor-pointer inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-stone-900 hover:bg-stone-800 text-white text-xs font-medium transition-colors shadow-2xs">
+                            <i data-lucide="upload" class="w-4 h-4"></i>
+                            <span>อัปโหลดรูปโลโก้จากเครื่อง</span>
+                        </label>
+                        <input type="file" id="setting-logo-upload" accept="image/png,image/jpeg,image/webp,image/svg+xml" onchange="handleLogoFileUpload(event)" class="hidden">
+                        
+                        <button type="button" id="btn-remove-logo-img" onclick="removeUploadedLogo()" class="hidden inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 text-xs font-medium transition-colors">
+                            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                            <span>ลบรูปภาพ</span>
+                        </button>
+                    </div>
+
+                    <div>
+                        <span class="text-xs text-stone-500 block mb-1.5">หรือเลือกไอคอนอาหารสำเร็จรูป:</span>
+                        <div id="emoji-preset-grid" class="grid grid-cols-5 sm:grid-cols-10 gap-1.5"></div>
+                    </div>
+                </div>
+
+                <!-- Brand Theme Color -->
+                <div class="space-y-2 pt-1">
+                    <label class="block text-sm font-medium text-stone-700">โทนสีประจำร้าน</label>
+                    <div id="theme-color-grid" class="grid grid-cols-3 sm:grid-cols-6 gap-2"></div>
+                </div>
+
+                <!-- Owner PIN Security -->
+                <div class="pt-3 border-t border-stone-100">
+                    <div class="flex items-center justify-between gap-3">
+                        <div>
+                            <label for="setting-owner-pin" class="block text-sm font-medium text-stone-700">รหัส PIN เข้าหน้าเจ้าของร้าน</label>
+                            <p class="text-[11px] text-stone-400">ป้องกันไม่ให้ลูกค้ากดเข้ามาแก้ไขเมนูหรือดูยอดขาย</p>
+                        </div>
+                        <input type="text" id="setting-owner-pin" inputmode="numeric" pattern="[0-9]{4,10}" maxlength="10" required
+                            class="w-32 text-center font-bold tracking-widest px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500">
+                    </div>
+                </div>
+
+                <!-- Firebase Cloud Database Configuration -->
+                <div class="pt-3 border-t border-stone-100 space-y-2.5">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <label for="setting-firebase-config" class="text-sm font-bold text-stone-800 flex items-center gap-1.5">
+                                <i data-lucide="cloud" class="w-4 h-4 text-brand-500"></i>
+                                <span>ฐานข้อมูลออนไลน์ (Firebase Firestore)</span>
+                            </label>
+                            <p class="text-[11px] text-stone-500">ฝังค่าโปรเจกต์ <strong class="text-stone-700">app-restaurant-be7f4</strong> ไว้ในระบบอัตโนมัติแล้ว</p>
+                        </div>
+                        <span id="modal-firebase-status" class="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700">เชื่อมต่ออัตโนมัติ</span>
+                    </div>
+
+                    <textarea id="setting-firebase-config" rows="4"
+                        placeholder='วางค่า firebaseConfig ที่คัดลอกมาจาก Firebase Console เช่น {"apiKey":"...","projectId":"..."}'
+                        class="w-full p-3 bg-stone-50 border border-stone-200 rounded-xl text-xs font-mono text-stone-700 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"></textarea>
+                    
+                    <div class="flex items-center justify-between text-[11px]">
+                        <span class="text-stone-400">ซิงค์ข้อมูลอัตโนมัติระหว่าง iPad, มือถือร้าน และมือถือลูกค้า</span>
+                        <button type="button" onclick="resetToEmbeddedFirebase()" class="text-brand-600 hover:underline font-medium">คืนค่าโปรเจกต์หลัก (app-restaurant-be7f4)</button>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between pt-4 border-t border-stone-100">
+                    <button type="button" onclick="resetShopSettingsToDefault()" class="text-xs text-stone-400 hover:text-stone-600 underline">
+                        คืนค่าชื่อ/โลโก้เริ่มต้น
+                    </button>
+                    <div class="flex items-center gap-2">
+                        <button type="button" onclick="closeShopSettingsModal()" class="px-4 py-2 rounded-xl text-sm font-medium text-stone-600 hover:bg-stone-100 transition-colors">
+                            ยกเลิก
+                        </button>
+                        <button type="submit" class="px-5 py-2 rounded-xl text-sm font-medium bg-brand-500 hover:bg-brand-600 text-white shadow-sm transition-colors flex items-center gap-1.5">
+                            <i data-lucide="check" class="w-4 h-4"></i>
+                            <span>บันทึกการตั้งค่า</span>
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MODAL: CONFIRMATION DIALOG                 -->
+    <!-- ========================================== -->
+    <div id="confirm-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-stone-900/50 backdrop-blur-xs p-4">
+        <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl border border-stone-200 text-center space-y-4">
+            <div class="w-12 h-12 rounded-full bg-red-50 text-red-500 flex items-center justify-center mx-auto">
+                <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+            </div>
+            <div>
+                <h3 id="confirm-title" class="text-lg font-bold text-stone-900">ยืนยันการทำรายการ</h3>
+                <p id="confirm-message" class="text-sm text-stone-500 mt-1">คุณต้องการดำเนินการนี้ใช่หรือไม่?</p>
+            </div>
+            <div class="flex gap-2 pt-2">
+                <button onclick="closeConfirmModal()" class="flex-1 py-2.5 rounded-xl text-sm font-medium bg-stone-100 hover:bg-stone-200 text-stone-700 transition-colors">ยกเลิก</button>
+                <button id="confirm-action-btn" class="flex-1 py-2.5 rounded-xl text-sm font-medium bg-red-500 hover:bg-red-600 text-white transition-colors">ยืนยัน</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- TOAST NOTIFICATION CONTAINER               -->
+    <!-- ========================================== -->
+    <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- ========================================== -->
+    <!-- APPLICATION LOGIC                          -->
+    <!-- ========================================== -->
+    <script>
+        // --- 1. EMBEDDED FIREBASE CONFIGURATION (AUTO-CONNECT ON ALL DEVICES) ---
+        const DEFAULT_FIREBASE_CONFIG = {
+            apiKey: "AIzaSyAJST-O0bq0yjh7QH3FBdZSfC0oonABl3w",
+            authDomain: "app-restaurant-be7f4.firebaseapp.com",
+            projectId: "app-restaurant-be7f4",
+            storageBucket: "app-restaurant-be7f4.firebasestorage.app",
+            messagingSenderId: "509931628153",
+            appId: "1:509931628153:web:6946a6e39be5346e2556a8",
+            measurementId: "G-9FFHNYK6RB"
+        };
+
+        const STORAGE_KEYS = {
+            MENU: 'khrua_khun_im_menu_v2',
+            ORDERS: 'khrua_khun_im_orders_v2',
+            ORDER_SEQ: 'khrua_khun_im_seq_v2',
+            SHOP_SETTINGS: 'restaurant_app_settings_v2',
+            FIREBASE_CFG: 'restaurant_firebase_config_v1',
+            OWNER_UNLOCKED: 'restaurant_owner_unlocked_session',
+            MY_CUSTOMER_ORDERS: 'restaurant_my_customer_orders_v1'
+        };
+
+        const EMOJI_PRESETS = ['🍳', '🍜', '🍛', '🍲', '🍱', '🥗', '🍔', '☕', '🍰', '🍕'];
+
+        const THEME_PALETTES = {
+            orange: {
+                label: 'ส้มอบอุ่น', swatch: '#f97316',
+                50: '#fff7ed', 100: '#ffedd5', 200: '#fed7aa', 300: '#fdba74',
+                400: '#fb923c', 500: '#f97316', 600: '#ea580c', 700: '#c2410c',
+                800: '#9a3412', 900: '#7c2d12'
+            },
+            emerald: {
+                label: 'เขียวมรกต', swatch: '#10b981',
+                50: '#ecfdf5', 100: '#d1fae5', 200: '#a7f3d0', 300: '#6ee7b7',
+                400: '#34d399', 500: '#10b981', 600: '#059669', 700: '#047857',
+                800: '#065f46', 900: '#064e3b'
+            },
+            blue: {
+                label: 'น้ำเงินรอยัล', swatch: '#2563eb',
+                50: '#eff6ff', 100: '#dbeafe', 200: '#bfdbfe', 300: '#93c5fd',
+                400: '#60a5fa', 500: '#2563eb', 600: '#1d4ed8', 700: '#1e40af',
+                800: '#1e3a8a', 900: '#172554'
+            },
+            red: {
+                label: 'แดงคริมสัน', swatch: '#e11d48',
+                50: '#fff1f2', 100: '#ffe4e6', 200: '#fecdd3', 300: '#fda4af',
+                400: '#fb7185', 500: '#e11d48', 600: '#be123c', 700: '#9f1239',
+                800: '#881337', 900: '#4c0519'
+            },
+            amber: {
+                label: 'เหลืองทอง', swatch: '#d97706',
+                50: '#fffbeb', 100: '#fef3c7', 200: '#fde68a', 300: '#fcd34d',
+                400: '#fbbf24', 500: '#d97706', 600: '#b45309', 700: '#92400e',
+                800: '#78350f', 900: '#451a03'
+            },
+            slate: {
+                label: 'เทาโมเดิร์น', swatch: '#334155',
+                50: '#f8fafc', 100: '#f1f5f9', 200: '#e2e8f0', 300: '#cbd5e1',
+                400: '#94a3b8', 500: '#334155', 600: '#1e293b', 700: '#0f172a',
+                800: '#0f172a', 900: '#020617'
+            }
+        };
+
+        const DEFAULT_SHOP_SETTINGS = {
+            name: 'ครัวคุณอิ่ม',
+            subtitle: 'ระบบจัดการเมนูและออเดอร์ประจำวัน',
+            logoType: 'emoji',
+            logoEmoji: '🍳',
+            logoImageBase64: '',
+            themeColor: 'orange',
+            ownerPin: '1234'
+        };
+
+        const DEFAULT_MENU = [
+            { id: 'm1', name: 'ข้าวกะเพราหมูสับไข่ดาว', price: 65, category: 'อาหารจานเดียว', available: true },
+            { id: 'm2', name: 'ข้าวผัดปูจานกลาง', price: 95, category: 'อาหารจานเดียว', available: true },
+            { id: 'm3', name: 'ต้มยำกุ้งน้ำข้น', price: 160, category: 'กับข้าว', available: true },
+            { id: 'm4', name: 'ไข่เจียวหมูสับฟูกรอบ', price: 70, category: 'กับข้าว', available: true },
+            { id: 'm5', name: 'ชาไทยเย็นสูตรเข้มข้น', price: 45, category: 'เครื่องดื่ม', available: true },
+            { id: 'm6', name: 'บัวลอยไข่หวาน', price: 50, category: 'ของหวาน', available: false }
+        ];
+
+        const ORDER_STATUSES = {
+            pending: {
+                label: 'รอรับออเดอร์ / รอทำ',
+                badgeClass: 'bg-amber-100 text-amber-800 border-amber-200',
+                barClass: 'bg-amber-400',
+                dot: '🟡'
+            },
+            cooking: {
+                label: 'กำลังปรุงอาหาร',
+                badgeClass: 'bg-orange-100 text-orange-800 border-orange-200',
+                barClass: 'bg-orange-500',
+                dot: '🟠'
+            },
+            ready: {
+                label: 'พร้อมส่ง / รอจัดส่ง',
+                badgeClass: 'bg-blue-100 text-blue-800 border-blue-200',
+                barClass: 'bg-blue-500',
+                dot: '🔵'
+            },
+            completed: {
+                label: 'จัดส่งสำเร็จ',
+                badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+                barClass: 'bg-emerald-500',
+                dot: '🟢'
+            },
+            cancelled: {
+                label: 'ยกเลิกออเดอร์',
+                badgeClass: 'bg-red-100 text-red-800 border-red-200',
+                barClass: 'bg-red-500',
+                dot: '🔴'
+            }
+        };
+
+        // App Runtime State
+        let isCustomerMode = false;
+        let shopSettings = { ...DEFAULT_SHOP_SETTINGS };
+        let draftShopSettings = { ...DEFAULT_SHOP_SETTINGS };
+        let menuItems = [];
+        let orders = [];
+        let orderSequence = 1;
+        let currentCart = {};
+        let customerCart = {};
+        let myTrackedOrderIds = [];
+        let selectedMenuCategory = 'ทั้งหมด';
+        let selectedCustomerCategory = 'ทั้งหมด';
+        let currentOrderFilter = 'active';
+        let selectedDate = '';
+        let confirmCallback = null;
+
+        // Firebase Cloud State
+        let db = null;
+        let isFirebaseConnected = false;
+        let unsubMenu = null;
+        let unsubOrders = null;
+        let unsubSettings = null;
+        let isInitialCloudSyncDone = false;
+
+        // --- DATE HELPERS ---
+        function getLocalDateStr(dateObj = new Date()) {
+            const y = dateObj.getFullYear();
+            const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+            const d = String(dateObj.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        }
+
+        function getOffsetDateStr(daysOffset) {
+            const d = new Date();
+            d.setDate(d.getDate() + daysOffset);
+            return getLocalDateStr(d);
+        }
+
+        function formatThaiDate(dateStr, short = false) {
+            if (!dateStr) return '';
+            const [y, m, d] = dateStr.split('-').map(Number);
+            const dateObj = new Date(y, m - 1, d);
+            const options = short 
+                ? { day: 'numeric', month: 'short', year: '2-digit' }
+                : { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+            return dateObj.toLocaleDateString('th-TH', options);
+        }
+
+        // --- 2. INITIALIZATION & ROLE DETECTION ---
+        document.addEventListener('DOMContentLoaded', () => {
+            selectedDate = getLocalDateStr();
+            const urlParams = new URLSearchParams(window.location.search);
+            isCustomerMode = urlParams.get('mode') === 'customer';
+
+            loadLocalFallbackData();
+            applyShopSettings();
+            configureRoleUI();
+
+            // Initialize Firebase automatically using embedded config (or custom override)
+            const activeFbConfig = getActiveFirebaseConfig();
+            initFirebaseConnection(activeFbConfig);
+
+            if (!isCustomerMode) {
+                syncDatePickerUI();
+                setQuickTime(30);
+                checkOwnerPinLock();
+            } else {
+                setCustomerQuickTime(15);
+                document.getElementById('cust-today-date-label').textContent = `วัน${formatThaiDate(selectedDate, false)} • เลือกเมนูที่ต้องการสั่งด้านล่าง`;
+            }
+
+            renderAll();
+            lucide.createIcons();
+
+            setInterval(() => {
+                if (!isCustomerMode && !document.getElementById('view-orders').classList.contains('hidden')) {
+                    renderOrdersBoard();
+                }
+            }, 60000);
+        });
+
+        function configureRoleUI() {
+            const ownerEls = document.querySelectorAll('.owner-only');
+            const customerEls = document.querySelectorAll('.customer-only');
+
+            if (isCustomerMode) {
+                ownerEls.forEach(el => el.classList.add('hidden'));
+                customerEls.forEach(el => el.classList.remove('hidden'));
+                document.getElementById('header-brand-trigger').classList.remove('cursor-pointer');
+            } else {
+                customerEls.forEach(el => el.classList.add('hidden'));
+                ownerEls.forEach(el => {
+                    if (!['archive-warning-banner'].includes(el.id)) {
+                        el.classList.remove('hidden');
+                    }
+                });
+            }
+        }
+
+        function handleHeaderBrandClick() {
+            if (isCustomerMode) return;
+            openShopSettingsModal();
+        }
+
+        function checkOwnerPinLock() {
+            if (isCustomerMode) return;
+            const isUnlocked = sessionStorage.getItem(STORAGE_KEYS.OWNER_UNLOCKED) === 'true';
+            const overlay = document.getElementById('owner-pin-overlay');
+            if (!isUnlocked) {
+                overlay.classList.remove('hidden');
+                overlay.classList.add('flex');
+                setTimeout(() => document.getElementById('owner-pin-input')?.focus(), 100);
+            } else {
+                overlay.classList.add('hidden');
+                overlay.classList.remove('flex');
+            }
+        }
+
+        function verifyOwnerPin(e) {
+            e.preventDefault();
+            const inputEl = document.getElementById('owner-pin-input');
+            const errEl = document.getElementById('pin-error-msg');
+            const expectedPin = shopSettings.ownerPin || '1234';
+
+            if (inputEl.value.trim() === expectedPin) {
+                sessionStorage.setItem(STORAGE_KEYS.OWNER_UNLOCKED, 'true');
+                errEl.classList.add('hidden');
+                inputEl.value = '';
+                const overlay = document.getElementById('owner-pin-overlay');
+                overlay.classList.add('hidden');
+                overlay.classList.remove('flex');
+                showToast('เข้าสู่ระบบเจ้าของร้านเรียบร้อยแล้ว', 'success');
+            } else {
+                errEl.classList.remove('hidden');
+                inputEl.value = '';
+                inputEl.focus();
+            }
+        }
+
+        function switchToCustomerMode() {
+            const url = new URL(window.location.href);
+            url.searchParams.set('mode', 'customer');
+            window.location.href = url.toString();
+        }
+
+        // --- 3. FIREBASE FIRESTORE REAL-TIME SYNC ENGINE ---
+        function getActiveFirebaseConfig() {
+            try {
+                const customSaved = localStorage.getItem(STORAGE_KEYS.FIREBASE_CFG);
+                if (customSaved) {
+                    const parsed = JSON.parse(customSaved);
+                    if (parsed && parsed.apiKey && parsed.projectId) return parsed;
+                }
+            } catch (e) {
+                console.warn('Invalid custom firebase config in storage, falling back to embedded config.');
+            }
+            return DEFAULT_FIREBASE_CONFIG;
+        }
+
+        function initFirebaseConnection(configObj) {
+            if (!configObj || !configObj.apiKey || !configObj.projectId) {
+                updateCloudStatusBadge(false);
+                return;
+            }
+
+            try {
+                if (unsubMenu) unsubMenu();
+                if (unsubOrders) unsubOrders();
+                if (unsubSettings) unsubSettings();
+
+                if (firebase.apps.length > 0) {
+                    firebase.app().delete().then(() => startFirebaseApp(configObj));
+                } else {
+                    startFirebaseApp(configObj);
+                }
+            } catch (err) {
+                console.error('Firebase init error:', err);
+                updateCloudStatusBadge(false);
+            }
+        }
+
+        function startFirebaseApp(configObj) {
+            try {
+                firebase.initializeApp(configObj);
+                db = firebase.firestore();
+                isFirebaseConnected = true;
+                updateCloudStatusBadge(true);
+
+                // 1. Real-time Listener for Shop Settings
+                unsubSettings = db.collection('restaurant_config').doc('shop_info')
+                    .onSnapshot((doc) => {
+                        if (doc.exists) {
+                            shopSettings = { ...DEFAULT_SHOP_SETTINGS, ...doc.data() };
+                            localStorage.setItem(STORAGE_KEYS.SHOP_SETTINGS, JSON.stringify(shopSettings));
+                            applyShopSettings();
+                        } else if (!isCustomerMode) {
+                            db.collection('restaurant_config').doc('shop_info').set(shopSettings).catch(console.error);
+                        }
+                    }, (err) => {
+                        console.error('Settings snapshot error:', err);
+                        updateCloudStatusBadge(false);
+                    });
+
+                // 2. Real-time Listener for Menu Items
+                unsubMenu = db.collection('restaurant_menu')
+                    .onSnapshot((snapshot) => {
+                        if (snapshot.empty && !isInitialCloudSyncDone && !isCustomerMode) {
+                            isInitialCloudSyncDone = true;
+                            const batch = db.batch();
+                            menuItems.forEach(item => {
+                                const ref = db.collection('restaurant_menu').doc(item.id);
+                                batch.set(ref, item);
+                            });
+                            batch.commit().catch(console.error);
+                            return;
+                        }
+
+                        isInitialCloudSyncDone = true;
+                        const cloudMenu = [];
+                        snapshot.forEach(doc => cloudMenu.push({ id: doc.id, ...doc.data() }));
+                        
+                        // Sort newest added first if createdAt exists, otherwise keep consistent order
+                        cloudMenu.sort((a, b) => (b.sortOrder || 0) - (a.sortOrder || 0));
+                        menuItems = cloudMenu;
+                        localStorage.setItem(STORAGE_KEYS.MENU, JSON.stringify(menuItems));
+                        
+                        if (isCustomerMode) {
+                            renderCustomerMenuAndCart();
+                        } else {
+                            renderMenuManagement();
+                            renderOrderMenuSelection();
+                            renderCart();
+                        }
+                    }, (err) => {
+                        console.error('Menu snapshot error:', err);
+                        updateCloudStatusBadge(false);
+                    });
+
+                // 3. Real-time Listener for Orders
+                unsubOrders = db.collection('restaurant_orders')
+                    .onSnapshot((snapshot) => {
+                        const cloudOrders = [];
+                        let maxSeq = 0;
+
+                        snapshot.forEach(doc => {
+                            const data = { id: doc.id, ...doc.data() };
+                            cloudOrders.push(data);
+                            const match = doc.id.match(/^ORD-(\d+)$/);
+                            if (match) {
+                                const num = parseInt(match[1], 10);
+                                if (num > maxSeq) maxSeq = num;
+                            }
+                        });
+
+                        orders = cloudOrders;
+                        if (maxSeq >= orderSequence) {
+                            orderSequence = maxSeq + 1;
+                        }
+                        localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+                        localStorage.setItem(STORAGE_KEYS.ORDER_SEQ, orderSequence.toString());
+
+                        if (isCustomerMode) {
+                            renderCustomerTrackedOrders();
+                        } else {
+                            renderOrdersBoard();
+                            renderSalesSummary();
+                        }
+                    }, (err) => {
+                        console.error('Orders snapshot error:', err);
+                        updateCloudStatusBadge(false);
+                    });
+
+            } catch (err) {
+                console.error('Start Firebase error:', err);
+                isFirebaseConnected = false;
+                updateCloudStatusBadge(false);
+            }
+        }
+
+        function updateCloudStatusBadge(connected) {
+            const badge = document.getElementById('cloud-status-badge');
+            const modalBadge = document.getElementById('modal-firebase-status');
+            if (connected) {
+                badge.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200';
+                badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-500"></span><span>ออนไลน์ (Cloud Sync)</span>`;
+                if (modalBadge) {
+                    modalBadge.className = 'text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700';
+                    modalBadge.textContent = 'เชื่อมต่อออนไลน์แล้ว';
+                }
+            } else {
+                badge.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-stone-100 text-stone-600 border border-stone-200';
+                badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-stone-400"></span><span>ออฟไลน์ (Local)</span>`;
+                if (modalBadge) {
+                    modalBadge.className = 'text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700';
+                    modalBadge.textContent = 'โหมดออฟไลน์';
+                }
+            }
+        }
+
+        // --- 4. LOCAL STORAGE FALLBACK & PERSISTENCE ---
+        function loadLocalFallbackData() {
+            try {
+                const savedSettings = localStorage.getItem(STORAGE_KEYS.SHOP_SETTINGS);
+                if (savedSettings) shopSettings = { ...DEFAULT_SHOP_SETTINGS, ...JSON.parse(savedSettings) };
+
+                const savedMenu = localStorage.getItem(STORAGE_KEYS.MENU);
+                const savedOrders = localStorage.getItem(STORAGE_KEYS.ORDERS);
+                const savedSeq = localStorage.getItem(STORAGE_KEYS.ORDER_SEQ);
+                const savedMyOrders = localStorage.getItem(STORAGE_KEYS.MY_CUSTOMER_ORDERS);
+
+                menuItems = savedMenu ? JSON.parse(savedMenu) : [...DEFAULT_MENU];
+                orders = savedOrders ? JSON.parse(savedOrders) : [];
+                orderSequence = savedSeq ? parseInt(savedSeq, 10) : (orders.length + 1);
+                myTrackedOrderIds = savedMyOrders ? JSON.parse(savedMyOrders) : [];
+            } catch (e) {
+                console.error('Error loading local storage:', e);
+                menuItems = [...DEFAULT_MENU];
+                orders = [];
+            }
+        }
+
+        async function persistMenuItem(item) {
+            localStorage.setItem(STORAGE_KEYS.MENU, JSON.stringify(menuItems));
+            if (isFirebaseConnected && db) {
+                try {
+                    await db.collection('restaurant_menu').doc(item.id).set(item);
+                } catch (e) {
+                    console.error('Cloud save menu error:', e);
+                }
+            }
+        }
+
+        async function removeMenuItemFromStorage(id) {
+            localStorage.setItem(STORAGE_KEYS.MENU, JSON.stringify(menuItems));
+            if (isFirebaseConnected && db) {
+                try {
+                    await db.collection('restaurant_menu').doc(id).delete();
+                } catch (e) {
+                    console.error('Cloud delete menu error:', e);
+                }
+            }
+        }
+
+        async function persistOrder(orderObj) {
+            localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+            localStorage.setItem(STORAGE_KEYS.ORDER_SEQ, orderSequence.toString());
+            if (isFirebaseConnected && db) {
+                try {
+                    await db.collection('restaurant_orders').doc(orderObj.id).set(orderObj);
+                } catch (e) {
+                    console.error('Cloud save order error:', e);
+                }
+            }
+        }
+
+        async function removeOrderFromStorage(orderId) {
+            localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+            if (isFirebaseConnected && db) {
+                try {
+                    await db.collection('restaurant_orders').doc(orderId).delete();
+                } catch (e) {
+                    console.error('Cloud delete order error:', e);
+                }
+            }
+        }
+
+        // --- 5. SHOP SETTINGS, LOGO & THEME ---
+        function applyShopSettings() {
+            const name = shopSettings.name || DEFAULT_SHOP_SETTINGS.name;
+            const subtitle = shopSettings.subtitle || '';
+
+            document.title = isCustomerMode ? `${name} - สั่งอาหารออนไลน์` : `${name} - ระบบจัดการร้านอาหาร`;
+            document.getElementById('header-shop-name').textContent = name;
+            
+            const subtitleEl = document.getElementById('header-shop-subtitle');
+            subtitleEl.textContent = isCustomerMode ? 'เมนูอาหารออนไลน์ • สั่งง่าย ได้ไว' : (subtitle || 'ระบบจัดการเมนูและออเดอร์ประจำวัน');
+
+            const emojiEl = document.getElementById('header-logo-emoji');
+            const imgEl = document.getElementById('header-logo-img');
+
+            if (shopSettings.logoType === 'image' && shopSettings.logoImageBase64) {
+                imgEl.src = shopSettings.logoImageBase64;
+                imgEl.classList.remove('hidden');
+                emojiEl.classList.add('hidden');
+            } else {
+                emojiEl.textContent = shopSettings.logoEmoji || '🍳';
+                emojiEl.classList.remove('hidden');
+                imgEl.classList.add('hidden');
+            }
+
+            applyThemePalette(shopSettings.themeColor || 'orange');
+        }
+
+        function applyThemePalette(themeKey) {
+            const palette = THEME_PALETTES[themeKey] || THEME_PALETTES.orange;
+            let styleTag = document.getElementById('dynamic-brand-theme');
+            if (!styleTag) {
+                styleTag = document.createElement('style');
+                styleTag.id = 'dynamic-brand-theme';
+                document.head.appendChild(styleTag);
+            }
+
+            styleTag.textContent = `
+                .bg-brand-50 { background-color: ${palette[50]} !important; }
+                .bg-brand-50\\/40 { background-color: ${palette[50]}66 !important; }
+                .bg-brand-50\\/80 { background-color: ${palette[50]}cc !important; }
+                .bg-brand-100 { background-color: ${palette[100]} !important; }
+                .bg-brand-500 { background-color: ${palette[500]} !important; }
+                .bg-brand-600 { background-color: ${palette[600]} !important; }
+                .hover\\:bg-brand-50:hover { background-color: ${palette[50]} !important; }
+                .hover\\:bg-brand-100:hover { background-color: ${palette[100]} !important; }
+                .hover\\:bg-brand-200:hover { background-color: ${palette[200]} !important; }
+                .hover\\:bg-brand-600:hover { background-color: ${palette[600]} !important; }
+                .active\\:bg-brand-700:active { background-color: ${palette[700]} !important; }
+                .text-brand-100 { color: ${palette[100]} !important; }
+                .text-brand-500 { color: ${palette[500]} !important; }
+                .text-brand-600 { color: ${palette[600]} !important; }
+                .text-brand-700 { color: ${palette[700]} !important; }
+                .hover\\:text-brand-500:hover { color: ${palette[500]} !important; }
+                .hover\\:text-brand-600:hover { color: ${palette[600]} !important; }
+                .hover\\:text-brand-700:hover { color: ${palette[700]} !important; }
+                .group:hover .group-hover\\:text-brand-500 { color: ${palette[500]} !important; }
+                .group:hover .group-hover\\:text-brand-600 { color: ${palette[600]} !important; }
+                .group:hover .group-hover\\:bg-brand-50 { background-color: ${palette[50]} !important; }
+                .border-brand-200 { border-color: ${palette[200]} !important; }
+                .border-brand-400 { border-color: ${palette[400]} !important; }
+                .hover\\:border-brand-300:hover { border-color: ${palette[300]} !important; }
+                .focus\\:border-brand-500:focus { border-color: ${palette[500]} !important; }
+                .focus\\:ring-brand-500\\/30:focus { --tw-ring-color: ${palette[500]}4d !important; }
+                .from-brand-500 { --tw-gradient-from: ${palette[500]} !important; }
+                .to-brand-600 { --tw-gradient-to: ${palette[600]} !important; }
+                .shadow-brand-500\\/20 { --tw-shadow-color: ${palette[500]}33 !important; }
+            `;
+        }
+
+        function openShopSettingsModal() {
+            if (isCustomerMode) return;
+            draftShopSettings = { ...shopSettings };
+            document.getElementById('setting-shop-name').value = draftShopSettings.name;
+            document.getElementById('setting-shop-subtitle').value = draftShopSettings.subtitle || '';
+            document.getElementById('setting-owner-pin').value = draftShopSettings.ownerPin || '1234';
+            document.getElementById('setting-logo-upload').value = '';
+            document.getElementById('setting-firebase-config').value = JSON.stringify(getActiveFirebaseConfig(), null, 2);
+
+            renderEmojiPresetButtons();
+            renderThemeColorSwatches();
+            updateSettingsLivePreview();
+
+            const modal = document.getElementById('shop-settings-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            lucide.createIcons();
+        }
+
+        function closeShopSettingsModal() {
+            const modal = document.getElementById('shop-settings-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function renderEmojiPresetButtons() {
+            const grid = document.getElementById('emoji-preset-grid');
+            grid.innerHTML = EMOJI_PRESETS.map(emoji => {
+                const isSelected = draftShopSettings.logoType === 'emoji' && draftShopSettings.logoEmoji === emoji;
+                return `
+                    <button type="button" onclick="selectPresetEmoji('${emoji}')"
+                        class="h-10 rounded-xl border text-xl flex items-center justify-center transition-all ${isSelected ? 'border-brand-500 bg-brand-50 scale-105 shadow-2xs' : 'border-stone-200 bg-white hover:bg-stone-50'}">
+                        ${emoji}
+                    </button>
+                `;
+            }).join('');
+        }
+
+        function renderThemeColorSwatches() {
+            const grid = document.getElementById('theme-color-grid');
+            grid.innerHTML = Object.entries(THEME_PALETTES).map(([key, pal]) => {
+                const isSelected = draftShopSettings.themeColor === key;
+                return `
+                    <button type="button" onclick="selectDraftTheme('${key}')"
+                        class="flex items-center gap-2 px-2.5 py-2 rounded-xl border text-xs font-medium transition-all ${isSelected ? 'border-stone-900 bg-stone-100 text-stone-900 shadow-2xs' : 'border-stone-200 bg-white text-stone-600 hover:bg-stone-50'}">
+                        <span class="w-4 h-4 rounded-full shrink-0 border border-black/10" style="background-color: ${pal.swatch}"></span>
+                        <span class="truncate">${pal.label}</span>
+                    </button>
+                `;
+            }).join('');
+        }
+
+        function selectPresetEmoji(emoji) {
+            draftShopSettings.logoType = 'emoji';
+            draftShopSettings.logoEmoji = emoji;
+            renderEmojiPresetButtons();
+            updateSettingsLivePreview();
+        }
+
+        function selectDraftTheme(themeKey) {
+            draftShopSettings.themeColor = themeKey;
+            renderThemeColorSwatches();
+            updateSettingsLivePreview();
+        }
+
+        function handleLogoFileUpload(event) {
+            const file = event.target.files?.[0];
+            if (!file) return;
+
+            if (!file.type.startsWith('image/')) {
+                showToast('กรุณาเลือกไฟล์รูปภาพเท่านั้น', 'error');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    const MAX_SIZE = 180;
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > height) {
+                        if (width > MAX_SIZE) { height = Math.round((height * MAX_SIZE) / width); width = MAX_SIZE; }
+                    } else {
+                        if (height > MAX_SIZE) { width = Math.round((width * MAX_SIZE) / height); height = MAX_SIZE; }
+                    }
+
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+                    canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+
+                    const outputFormat = (file.type === 'image/png' || file.type === 'image/webp') ? 'image/png' : 'image/jpeg';
+                    draftShopSettings.logoType = 'image';
+                    draftShopSettings.logoImageBase64 = canvas.toDataURL(outputFormat, 0.85);
+                    renderEmojiPresetButtons();
+                    updateSettingsLivePreview();
+                    showToast('อัปโหลดรูปโลโก้สำเร็จ กด "บันทึกการตั้งค่า" เพื่อซิงค์', 'info');
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function removeUploadedLogo() {
+            draftShopSettings.logoType = 'emoji';
+            draftShopSettings.logoImageBase64 = '';
+            document.getElementById('setting-logo-upload').value = '';
+            renderEmojiPresetButtons();
+            updateSettingsLivePreview();
+        }
+
+        function updateSettingsLivePreview() {
+            const nameVal = document.getElementById('setting-shop-name').value.trim() || DEFAULT_SHOP_SETTINGS.name;
+            const subtitleVal = document.getElementById('setting-shop-subtitle').value.trim();
+
+            document.getElementById('preview-shop-name').textContent = nameVal;
+            document.getElementById('preview-shop-subtitle').textContent = subtitleVal || 'ระบบจัดการเมนูและออเดอร์ประจำวัน';
+
+            const previewBox = document.getElementById('preview-logo-box');
+            const previewEmoji = document.getElementById('preview-logo-emoji');
+            const previewImg = document.getElementById('preview-logo-img');
+            const removeBtn = document.getElementById('btn-remove-logo-img');
+
+            const pal = THEME_PALETTES[draftShopSettings.themeColor] || THEME_PALETTES.orange;
+            previewBox.style.backgroundColor = pal[500];
+
+            if (draftShopSettings.logoType === 'image' && draftShopSettings.logoImageBase64) {
+                previewImg.src = draftShopSettings.logoImageBase64;
+                previewImg.classList.remove('hidden');
+                previewEmoji.classList.add('hidden');
+                removeBtn.classList.remove('hidden');
+            } else {
+                previewEmoji.textContent = draftShopSettings.logoEmoji || '🍳';
+                previewEmoji.classList.remove('hidden');
+                previewImg.classList.add('hidden');
+                removeBtn.classList.add('hidden');
+            }
+        }
+
+        function parseFirebaseConfigInput(rawText) {
+            const trimmed = (rawText || '').trim();
+            if (!trimmed) return null;
+            // Allow pasting JS object literal like { apiKey: "..." } or valid JSON
+            const firstBrace = trimmed.indexOf('{');
+            const lastBrace = trimmed.lastIndexOf('}');
+            if (firstBrace === -1 || lastBrace === -1) return null;
+            const objStr = trimmed.slice(firstBrace, lastBrace + 1);
+            try {
+                return JSON.parse(objStr);
+            } catch (e) {
+                try {
+                    // Convert unquoted keys to valid JSON keys safely
+                    const jsonified = objStr.replace(/([{,]\s*)([a-zA-Z0-9_]+)\s*:/g, '$1"$2":');
+                    return JSON.parse(jsonified);
+                } catch (e2) {
+                    return null;
+                }
+            }
+        }
+
+        async function saveShopSettings(e) {
+            e.preventDefault();
+            const nameInput = document.getElementById('setting-shop-name').value.trim();
+            const pinInput = document.getElementById('setting-owner-pin').value.trim() || '1234';
+            const fbRaw = document.getElementById('setting-firebase-config').value.trim();
+
+            if (!nameInput) {
+                showToast('กรุณากรอกชื่อร้านอาหาร', 'error');
+                return;
+            }
+
+            const parsedFb = parseFirebaseConfigInput(fbRaw);
+            if (!parsedFb || !parsedFb.apiKey || !parsedFb.projectId) {
+                showToast('รูปแบบค่า Firebase Config ไม่ถูกต้อง', 'error');
+                return;
+            }
+
+            shopSettings = {
+                ...draftShopSettings,
+                name: nameInput,
+                subtitle: document.getElementById('setting-shop-subtitle').value.trim(),
+                ownerPin: pinInput
+            };
+
+            localStorage.setItem(STORAGE_KEYS.SHOP_SETTINGS, JSON.stringify(shopSettings));
+            localStorage.setItem(STORAGE_KEYS.FIREBASE_CFG, JSON.stringify(parsedFb));
+
+            applyShopSettings();
+            initFirebaseConnection(parsedFb);
+
+            if (isFirebaseConnected && db) {
+                try {
+                    await db.collection('restaurant_config').doc('shop_info').set(shopSettings);
+                } catch (err) {
+                    console.error('Failed to sync shop settings to Firestore:', err);
+                }
+            }
+
+            closeShopSettingsModal();
+            showToast(`บันทึกข้อมูลร้าน "${shopSettings.name}" และซิงค์ขึ้น Cloud แล้ว`, 'success');
+        }
+
+        function resetToEmbeddedFirebase() {
+            localStorage.removeItem(STORAGE_KEYS.FIREBASE_CFG);
+            document.getElementById('setting-firebase-config').value = JSON.stringify(DEFAULT_FIREBASE_CONFIG, null, 2);
+            initFirebaseConnection(DEFAULT_FIREBASE_CONFIG);
+            showToast('คืนค่าเชื่อมต่อโปรเจกต์ app-restaurant-be7f4 เรียบร้อย', 'info');
+        }
+
+        function resetShopSettingsToDefault() {
+            draftShopSettings = { ...DEFAULT_SHOP_SETTINGS, ownerPin: shopSettings.ownerPin || '1234' };
+            document.getElementById('setting-shop-name').value = draftShopSettings.name;
+            document.getElementById('setting-shop-subtitle').value = draftShopSettings.subtitle;
+            document.getElementById('setting-logo-upload').value = '';
+            renderEmojiPresetButtons();
+            renderThemeColorSwatches();
+            updateSettingsLivePreview();
+        }
+
+        // --- 6. CUSTOMER SHARE LINK & QR CODE MODAL ---
+        function getCustomerPortalUrl() {
+            const url = new URL(window.location.href);
+            url.searchParams.set('mode', 'customer');
+            return url.toString();
+        }
+
+        function openCustomerShareModal() {
+            const shareUrl = getCustomerPortalUrl();
+            document.getElementById('customer-share-url-input').value = shareUrl;
+            document.getElementById('qr-shop-caption').textContent = `สแกนสั่งอาหารร้าน ${shopSettings.name || 'ครัวคุณอิ่ม'}`;
+            
+            const qrApi = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=8&data=${encodeURIComponent(shareUrl)}`;
+            document.getElementById('customer-qr-image').src = qrApi;
+
+            const modal = document.getElementById('customer-share-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            lucide.createIcons();
+        }
+
+        function closeCustomerShareModal() {
+            const modal = document.getElementById('customer-share-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function copyCustomerShareUrl() {
+            const input = document.getElementById('customer-share-url-input');
+            input.select();
+            input.setSelectionRange(0, 99999);
+            try {
+                document.execCommand('copy');
+                showToast('คัดลอกลิงก์สั่งอาหารสำหรับลูกค้าเรียบร้อยแล้ว!', 'success');
+            } catch (err) {
+                showToast('ไม่สามารถคัดลอกอัตโนมัติ กรุณากดคัดลอกในช่องข้อความ', 'error');
+            }
+        }
+
+        function previewCustomerMode() {
+            window.open(getCustomerPortalUrl(), '_blank');
+        }
+
+        // --- 7. CUSTOMER PORTAL LOGIC ---
+        function switchCustomerTab(tab) {
+            const orderView = document.getElementById('cust-view-order');
+            const trackView = document.getElementById('cust-view-track');
+            const btnOrder = document.getElementById('cust-tab-btn-order');
+            const btnTrack = document.getElementById('cust-tab-btn-track');
+
+            if (tab === 'order') {
+                orderView.classList.remove('hidden');
+                trackView.classList.add('hidden');
+                btnOrder.classList.add('bg-white', 'text-brand-600', 'shadow-sm');
+                btnOrder.classList.remove('text-stone-600');
+                btnTrack.classList.remove('bg-white', 'text-brand-600', 'shadow-sm');
+                btnTrack.classList.add('text-stone-600');
+            } else {
+                orderView.classList.add('hidden');
+                trackView.classList.remove('hidden');
+                btnTrack.classList.add('bg-white', 'text-brand-600', 'shadow-sm');
+                btnTrack.classList.remove('text-stone-600');
+                btnOrder.classList.remove('bg-white', 'text-brand-600', 'shadow-sm');
+                btnOrder.classList.add('text-stone-600');
+                renderCustomerTrackedOrders();
+            }
+            lucide.createIcons();
+        }
+
+        function setCustomerQuickTime(mins) {
+            const target = new Date(Date.now() + mins * 60000);
+            const hh = String(target.getHours()).padStart(2, '0');
+            const mm = String(target.getMinutes()).padStart(2, '0');
+            document.getElementById('cust-input-time').value = `${hh}:${mm}`;
+        }
+
+        function setCustomerCategoryFilter(cat) {
+            selectedCustomerCategory = cat;
+            renderCustomerMenuAndCart();
+        }
+
+        function updateCustomerCartQty(menuId, delta) {
+            const next = (customerCart[menuId] || 0) + delta;
+            if (next <= 0) delete customerCart[menuId];
+            else customerCart[menuId] = next;
+            renderCustomerMenuAndCart();
+        }
+
+        function resetCustomerCart() {
+            customerCart = {};
+            renderCustomerMenuAndCart();
+        }
+
+        function renderCustomerMenuAndCart() {
+            const availableMenus = menuItems.filter(m => m.available);
+            const catContainer = document.getElementById('cust-menu-categories');
+            const gridContainer = document.getElementById('cust-selectable-menu-grid');
+            const emptyMsg = document.getElementById('cust-no-menu-msg');
+
+            const categories = ['ทั้งหมด', ...new Set(availableMenus.map(m => m.category))];
+            if (!categories.includes(selectedCustomerCategory)) selectedCustomerCategory = 'ทั้งหมด';
+
+            catContainer.innerHTML = categories.map(cat => `
+                <button type="button" onclick="setCustomerCategoryFilter('${cat}')" 
+                    class="px-3 py-1 rounded-xl text-xs font-medium transition-all ${selectedCustomerCategory === cat ? 'bg-brand-500 text-white shadow-xs' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}">
+                    ${cat}
+                </button>
+            `).join('');
+
+            const displayed = selectedCustomerCategory === 'ทั้งหมด'
+                ? availableMenus
+                : availableMenus.filter(m => m.category === selectedCustomerCategory);
+
+            if (displayed.length === 0) {
+                gridContainer.innerHTML = '';
+                emptyMsg.classList.remove('hidden');
+            } else {
+                emptyMsg.classList.add('hidden');
+                gridContainer.innerHTML = displayed.map(item => {
+                    const qty = customerCart[item.id] || 0;
+                    return `
+                        <div class="p-4 rounded-2xl border transition-all flex flex-col justify-between gap-3 ${qty > 0 ? 'border-brand-400 bg-brand-50/40 shadow-xs' : 'border-stone-200 bg-white hover:border-brand-300'}">
+                            <div>
+                                <span class="text-[11px] font-medium text-stone-400">${escapeHtml(item.category)}</span>
+                                <h3 class="font-semibold text-stone-900 text-base leading-snug mt-0.5">${escapeHtml(item.name)}</h3>
+                            </div>
+                            <div class="flex items-center justify-between pt-2 border-t border-stone-100">
+                                <span class="font-bold text-brand-600 text-base">฿${item.price.toLocaleString()}</span>
+                                ${qty === 0 ? `
+                                    <button type="button" onclick="updateCustomerCartQty('${item.id}', 1)" class="flex items-center gap-1 px-3.5 py-2 rounded-xl bg-stone-900 hover:bg-brand-600 text-white text-xs font-semibold transition-colors">
+                                        <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                                        <span>เลือกเมนู</span>
+                                    </button>
+                                ` : `
+                                    <div class="flex items-center gap-2 bg-white border border-brand-200 rounded-xl p-1 shadow-2xs">
+                                        <button type="button" onclick="updateCustomerCartQty('${item.id}', -1)" class="w-7 h-7 flex items-center justify-center rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold">-</button>
+                                        <span class="w-6 text-center text-sm font-bold text-stone-900">${qty}</span>
+                                        <button type="button" onclick="updateCustomerCartQty('${item.id}', 1)" class="w-7 h-7 flex items-center justify-center rounded-lg bg-brand-500 hover:bg-brand-600 text-white font-bold">+</button>
+                                    </div>
+                                `}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            // Render Customer Cart Summary
+            const cartBox = document.getElementById('cust-cart-container');
+            const entries = Object.entries(customerCart);
+            let totalQty = 0;
+            let totalPrice = 0;
+
+            if (entries.length === 0) {
+                cartBox.innerHTML = `<div class="h-24 flex flex-col items-center justify-center text-stone-400 text-xs"><p>ตะกร้าของคุณยังว่างอยู่</p><p class="mt-0.5">กดเลือกเมนูอาหารที่ต้องการด้านซ้ายมือ</p></div>`;
+            } else {
+                cartBox.innerHTML = entries.map(([menuId, qty]) => {
+                    const item = menuItems.find(m => m.id === menuId);
+                    if (!item) return '';
+                    const sub = item.price * qty;
+                    totalQty += qty;
+                    totalPrice += sub;
+                    return `
+                        <div class="flex items-center justify-between bg-white p-2.5 rounded-xl border border-stone-200/70 text-sm">
+                            <div class="pr-2">
+                                <p class="font-medium text-stone-800 leading-tight">${escapeHtml(item.name)}</p>
+                                <p class="text-xs text-stone-500">฿${item.price} x ${qty} = <span class="font-semibold text-brand-600">฿${sub.toLocaleString()}</span></p>
+                            </div>
+                            <div class="flex items-center gap-1.5 shrink-0">
+                                <button type="button" onclick="updateCustomerCartQty('${menuId}', -1)" class="w-6 h-6 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 flex items-center justify-center font-bold text-xs">-</button>
+                                <span class="w-5 text-center font-semibold text-xs">${qty}</span>
+                                <button type="button" onclick="updateCustomerCartQty('${menuId}', 1)" class="w-6 h-6 rounded-lg bg-brand-100 hover:bg-brand-200 text-brand-700 flex items-center justify-center font-bold text-xs">+</button>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            document.getElementById('cust-cart-qty').textContent = totalQty;
+            document.getElementById('cust-cart-price').textContent = `฿${totalPrice.toLocaleString()}`;
+            lucide.createIcons();
+        }
+
+        async function submitCustomerOrder(e) {
+            e.preventDefault();
+            const entries = Object.entries(customerCart);
+            if (entries.length === 0) {
+                showToast('กรุณาเลือกเมนูอาหารอย่างน้อย 1 รายการ', 'error');
+                return;
+            }
+
+            const customerName = document.getElementById('cust-input-name').value.trim();
+            const deliveryTime = document.getElementById('cust-input-time').value;
+            const note = document.getElementById('cust-input-note').value.trim();
+
+            let totalPrice = 0;
+            const orderItems = entries.map(([menuId, qty]) => {
+                const menu = menuItems.find(m => m.id === menuId);
+                totalPrice += menu.price * qty;
+                return { menuId: menu.id, name: menu.name, price: menu.price, qty };
+            });
+
+            const orderNumber = `ORD-${String(orderSequence).padStart(3, '0')}`;
+            orderSequence++;
+
+            const newOrder = {
+                id: orderNumber,
+                orderDate: getLocalDateStr(),
+                customerName,
+                deliveryTime,
+                items: orderItems,
+                totalPrice,
+                note,
+                status: 'pending',
+                source: 'customer_online',
+                createdAt: new Date().toISOString()
+            };
+
+            orders.unshift(newOrder);
+            myTrackedOrderIds.unshift(orderNumber);
+            localStorage.setItem(STORAGE_KEYS.MY_CUSTOMER_ORDERS, JSON.stringify(myTrackedOrderIds));
+
+            await persistOrder(newOrder);
+
+            customerCart = {};
+            document.getElementById('cust-input-note').value = '';
+            renderCustomerMenuAndCart();
+            switchCustomerTab('track');
+            showToast(`ส่งออเดอร์ ${orderNumber} ให้ทางร้านเรียบร้อยแล้ว!`, 'success');
+        }
+
+        function renderCustomerTrackedOrders() {
+            const todayStr = getLocalDateStr();
+            const myOrders = orders.filter(o => myTrackedOrderIds.includes(o.id) && o.orderDate === todayStr);
+            
+            const badge = document.getElementById('cust-my-orders-badge');
+            if (myOrders.length > 0) {
+                badge.textContent = myOrders.length;
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
+
+            const listEl = document.getElementById('cust-tracked-orders-list');
+            const emptyEl = document.getElementById('cust-no-tracked-orders');
+
+            if (myOrders.length === 0) {
+                listEl.innerHTML = '';
+                emptyEl.classList.remove('hidden');
+                return;
+            }
+
+            emptyEl.classList.add('hidden');
+            listEl.innerHTML = myOrders.map(order => {
+                const st = ORDER_STATUSES[order.status] || ORDER_STATUSES.pending;
+                const stepIndex = { pending: 1, cooking: 2, ready: 3, completed: 4, cancelled: 0 }[order.status] || 1;
+
+                return `
+                    <div class="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+                        <div class="h-1.5 w-full ${st.barClass}"></div>
+                        <div class="p-5 space-y-4">
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <div>
+                                    <span class="text-xs font-bold px-2.5 py-1 rounded-lg bg-stone-100 text-stone-700">${escapeHtml(order.id)}</span>
+                                    <span class="text-xs text-stone-500 ml-2">เวลารับ/ส่ง: <strong>${escapeHtml(order.deliveryTime)} น.</strong></span>
+                                </div>
+                                <span class="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full border ${st.badgeClass}">
+                                    ${st.dot} ${st.label}
+                                </span>
+                            </div>
+
+                            ${order.status !== 'cancelled' ? `
+                                <div class="grid grid-cols-4 gap-1.5 pt-1">
+                                    <div class="text-center">
+                                        <div class="h-1.5 rounded-full ${stepIndex >= 1 ? 'bg-brand-500' : 'bg-stone-200'}"></div>
+                                        <span class="text-[10px] font-medium ${stepIndex >= 1 ? 'text-brand-700 font-bold' : 'text-stone-400'} mt-1 block">1. รับออเดอร์</span>
+                                    </div>
+                                    <div class="text-center">
+                                        <div class="h-1.5 rounded-full ${stepIndex >= 2 ? 'bg-brand-500' : 'bg-stone-200'}"></div>
+                                        <span class="text-[10px] font-medium ${stepIndex >= 2 ? 'text-brand-700 font-bold' : 'text-stone-400'} mt-1 block">2. กำลังปรุง</span>
+                                    </div>
+                                    <div class="text-center">
+                                        <div class="h-1.5 rounded-full ${stepIndex >= 3 ? 'bg-brand-500' : 'bg-stone-200'}"></div>
+                                        <span class="text-[10px] font-medium ${stepIndex >= 3 ? 'text-brand-700 font-bold' : 'text-stone-400'} mt-1 block">3. พร้อมส่ง</span>
+                                    </div>
+                                    <div class="text-center">
+                                        <div class="h-1.5 rounded-full ${stepIndex >= 4 ? 'bg-emerald-500' : 'bg-stone-200'}"></div>
+                                        <span class="text-[10px] font-medium ${stepIndex >= 4 ? 'text-emerald-700 font-bold' : 'text-stone-400'} mt-1 block">4. เสร็จสิ้น</span>
+                                    </div>
+                                </div>
+                            ` : ''}
+
+                            <div class="bg-stone-50 rounded-xl p-3 space-y-1.5 text-sm">
+                                ${order.items.map(i => `
+                                    <div class="flex justify-between text-stone-700">
+                                        <span><strong class="text-brand-600">x${i.qty}</strong> ${escapeHtml(i.name)}</span>
+                                        <span class="text-stone-500">฿${(i.price * i.qty).toLocaleString()}</span>
+                                    </div>
+                                `).join('')}
+                                <div class="pt-2 border-t border-stone-200/80 flex justify-between font-bold text-stone-900">
+                                    <span>ยอดรวมทั้งสิ้น</span>
+                                    <span class="text-brand-600">฿${order.totalPrice.toLocaleString()}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // --- 8. OWNER DATE & NAVIGATION LOGIC ---
+        function handleDateChange(newDate) {
+            if (!newDate) return;
+            selectedDate = newDate;
+            syncDatePickerUI();
+            renderAll();
+        }
+
+        function selectRelativeDate(daysOffset) {
+            selectedDate = getOffsetDateStr(daysOffset);
+            syncDatePickerUI();
+            renderAll();
+        }
+
+        function syncDatePickerUI() {
+            const picker = document.getElementById('selected-date-picker');
+            if (picker) picker.value = selectedDate;
+
+            const todayStr = getLocalDateStr();
+            const yesterdayStr = getOffsetDateStr(-1);
+            const isToday = selectedDate === todayStr;
+            const isYesterday = selectedDate === yesterdayStr;
+
+            const btnToday = document.getElementById('btn-date-today');
+            const btnYesterday = document.getElementById('btn-date-yesterday');
+
+            if (btnToday) {
+                btnToday.className = isToday
+                    ? 'px-2.5 py-1.5 rounded-xl text-xs font-medium transition-colors bg-brand-500 text-white shadow-2xs'
+                    : 'px-2.5 py-1.5 rounded-xl text-xs font-medium transition-colors bg-stone-100 hover:bg-stone-200 text-stone-700';
+            }
+            if (btnYesterday) {
+                btnYesterday.className = isYesterday
+                    ? 'px-2.5 py-1.5 rounded-xl text-xs font-medium transition-colors bg-brand-500 text-white shadow-2xs'
+                    : 'px-2.5 py-1.5 rounded-xl text-xs font-medium transition-colors bg-stone-100 hover:bg-stone-200 text-stone-700';
+            }
+
+            const formattedDate = formatThaiDate(selectedDate, false);
+            const labelPrefix = isToday ? 'วันนี้ - ' : (isYesterday ? 'เมื่อวาน - ' : '');
+            const labelEl = document.getElementById('selected-date-thai-label');
+            if (labelEl) labelEl.textContent = `${labelPrefix}${formattedDate}`;
+            
+            const targetDateEl = document.getElementById('new-order-target-date');
+            if (targetDateEl) targetDateEl.textContent = `${labelPrefix}${formattedDate}`;
+
+            const banner = document.getElementById('archive-warning-banner');
+            if (banner) {
+                if (!isToday) {
+                    document.getElementById('archive-banner-date').textContent = `${labelPrefix}${formattedDate}`;
+                    banner.classList.remove('hidden');
+                } else {
+                    banner.classList.add('hidden');
+                }
+            }
+        }
+
+        function switchTab(tabName) {
+            if (isCustomerMode) return;
+            const views = ['orders', 'new-order', 'summary', 'menu'];
+            views.forEach(v => {
+                const viewEl = document.getElementById(`view-${v}`);
+                const btnEl = document.getElementById(`tab-btn-${v}`);
+                if (v === tabName) {
+                    viewEl.classList.remove('hidden');
+                    btnEl.classList.add('bg-white', 'text-brand-600', 'shadow-sm');
+                    btnEl.classList.remove('text-stone-600', 'hover:text-stone-900');
+                } else {
+                    viewEl.classList.add('hidden');
+                    btnEl.classList.remove('bg-white', 'text-brand-600', 'shadow-sm');
+                    btnEl.classList.add('text-stone-600', 'hover:text-stone-900');
+                }
+            });
+
+            if (tabName === 'new-order') {
+                renderOrderMenuSelection();
+                renderCart();
+            } else if (tabName === 'summary') {
+                renderSalesSummary();
+            } else if (tabName === 'menu') {
+                renderMenuManagement();
+            } else {
+                renderOrdersBoard();
+            }
+            lucide.createIcons();
+        }
+
+        function renderAll() {
+            if (isCustomerMode) {
+                renderCustomerMenuAndCart();
+                renderCustomerTrackedOrders();
+            } else {
+                renderOrdersBoard();
+                renderOrderMenuSelection();
+                renderCart();
+                renderSalesSummary();
+                renderMenuManagement();
+            }
+        }
+
+        // --- 9. OWNER DAILY MENU MANAGEMENT ---
+        async function handleAddMenu(e) {
+            e.preventDefault();
+            const nameInput = document.getElementById('menu-name');
+            const priceInput = document.getElementById('menu-price');
+            const categoryInput = document.getElementById('menu-category');
+            const availableInput = document.getElementById('menu-available');
+
+            const newMenu = {
+                id: 'm_' + Date.now(),
+                name: nameInput.value.trim(),
+                price: parseFloat(priceInput.value),
+                category: categoryInput.value,
+                available: availableInput.checked,
+                sortOrder: Date.now()
+            };
+
+            menuItems.unshift(newMenu);
+            await persistMenuItem(newMenu);
+            
+            nameInput.value = '';
+            priceInput.value = '';
+            availableInput.checked = true;
+
+            renderMenuManagement();
+            renderOrderMenuSelection();
+            showToast(`เพิ่มเมนู "${newMenu.name}" เรียบร้อยแล้ว`, 'success');
+        }
+
+        async function toggleMenuAvailability(id) {
+            const item = menuItems.find(m => m.id === id);
+            if (!item) return;
+            item.available = !item.available;
+            
+            if (!item.available && currentCart[id]) {
+                delete currentCart[id];
+                renderCart();
+            }
+
+            await persistMenuItem(item);
+            renderMenuManagement();
+            renderOrderMenuSelection();
+            showToast(
+                item.available ? `เปิดขาย "${item.name}" วันนี้` : `ปิดขาย "${item.name}" ชั่วคราว`,
+                item.available ? 'success' : 'info'
+            );
+        }
+
+        async function setAllMenuAvailability(status) {
+            menuItems.forEach(m => m.available = status);
+            if (!status) {
+                currentCart = {};
+                renderCart();
+            }
+            localStorage.setItem(STORAGE_KEYS.MENU, JSON.stringify(menuItems));
+            if (isFirebaseConnected && db) {
+                const batch = db.batch();
+                menuItems.forEach(item => {
+                    batch.set(db.collection('restaurant_menu').doc(item.id), item);
+                });
+                await batch.commit().catch(console.error);
+            }
+            renderMenuManagement();
+            renderOrderMenuSelection();
+            showToast(status ? 'เปิดขายเมนูทั้งหมดแล้ว' : 'ปิดขายเมนูทั้งหมดแล้ว', 'info');
+        }
+
+        function openEditModal(id) {
+            const item = menuItems.find(m => m.id === id);
+            if (!item) return;
+            document.getElementById('edit-menu-id').value = item.id;
+            document.getElementById('edit-menu-name').value = item.name;
+            document.getElementById('edit-menu-price').value = item.price;
+            document.getElementById('edit-menu-category').value = item.category;
+
+            const modal = document.getElementById('edit-menu-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeEditModal() {
+            const modal = document.getElementById('edit-menu-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        async function saveEditedMenu(e) {
+            e.preventDefault();
+            const id = document.getElementById('edit-menu-id').value;
+            const item = menuItems.find(m => m.id === id);
+            if (!item) return;
+
+            item.name = document.getElementById('edit-menu-name').value.trim();
+            item.price = parseFloat(document.getElementById('edit-menu-price').value);
+            item.category = document.getElementById('edit-menu-category').value;
+
+            await persistMenuItem(item);
+            closeEditModal();
+            renderMenuManagement();
+            renderOrderMenuSelection();
+            renderCart();
+            showToast('บันทึกการแก้ไขเมนูเรียบร้อยแล้ว', 'success');
+        }
+
+        function confirmDeleteMenu(id) {
+            const item = menuItems.find(m => m.id === id);
+            if (!item) return;
+            openConfirmModal(
+                'ลบเมนูอาหาร',
+                `คุณต้องการลบเมนู "${item.name}" ออกจากรายการถาวรใช่หรือไม่?`,
+                async () => {
+                    menuItems = menuItems.filter(m => m.id !== id);
+                    delete currentCart[id];
+                    await removeMenuItemFromStorage(id);
+                    renderMenuManagement();
+                    renderOrderMenuSelection();
+                    renderCart();
+                    showToast(`ลบเมนู "${item.name}" แล้ว`, 'info');
+                }
+            );
+        }
+
+        function renderMenuManagement() {
+            const container = document.getElementById('menu-management-list');
+            if (!container) return;
+            const searchQuery = (document.getElementById('menu-search-input')?.value || '').toLowerCase().trim();
+            document.getElementById('total-menu-count').textContent = menuItems.length;
+
+            const filtered = menuItems.filter(m => 
+                m.name.toLowerCase().includes(searchQuery) || 
+                m.category.toLowerCase().includes(searchQuery)
+            );
+
+            if (filtered.length === 0) {
+                container.innerHTML = `<div class="py-10 text-center text-stone-400 text-sm">ไม่พบรายการเมนูที่ค้นหา</div>`;
+                return;
+            }
+
+            container.innerHTML = filtered.map(item => `
+                <div class="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${!item.available ? 'opacity-65' : ''}">
+                    <div class="flex items-start sm:items-center gap-3">
+                        <button onclick="toggleMenuAvailability('${item.id}')" title="คลิกเพื่อเปลี่ยนสถานะเปิด/ปิดขาย"
+                            class="mt-0.5 sm:mt-0 relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${item.available ? 'bg-emerald-500' : 'bg-stone-300'}">
+                            <span class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${item.available ? 'translate-x-5' : 'translate-x-0'}"></span>
+                        </button>
+                        <div>
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <span class="font-semibold text-stone-900 ${!item.available ? 'line-through text-stone-500' : ''}">${escapeHtml(item.name)}</span>
+                                <span class="text-[11px] font-medium px-2 py-0.5 rounded-md bg-stone-100 text-stone-600">${escapeHtml(item.category)}</span>
+                                ${item.available 
+                                    ? '<span class="text-[11px] font-medium px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700">พร้อมขาย</span>' 
+                                    : '<span class="text-[11px] font-medium px-2 py-0.5 rounded-md bg-red-50 text-red-600">หมด / งดขาย</span>'}
+                            </div>
+                            <p class="text-sm font-bold text-brand-600 mt-0.5">฿${item.price.toLocaleString()}</p>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-2 self-end sm:self-center">
+                        <button onclick="openEditModal('${item.id}')" class="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium bg-stone-100 hover:bg-stone-200 text-stone-700 transition-colors">
+                            <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
+                            <span>แก้ไข</span>
+                        </button>
+                        <button onclick="confirmDeleteMenu('${item.id}')" class="p-1.5 rounded-xl text-stone-400 hover:text-red-600 hover:bg-red-50 transition-colors" title="ลบเมนู">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+
+            lucide.createIcons();
+        }
+
+        // --- 10. OWNER POS NEW ORDER LOGIC ---
+        function setQuickTime(minutesToAdd) {
+            const target = new Date(Date.now() + minutesToAdd * 60000);
+            const hh = String(target.getHours()).padStart(2, '0');
+            const mm = String(target.getMinutes()).padStart(2, '0');
+            const el = document.getElementById('delivery-time');
+            if (el) el.value = `${hh}:${mm}`;
+        }
+
+        function setMenuCategoryFilter(cat) {
+            selectedMenuCategory = cat;
+            renderOrderMenuSelection();
+        }
+
+        function renderOrderMenuSelection() {
+            const availableMenus = menuItems.filter(m => m.available);
+            const catContainer = document.getElementById('order-menu-categories');
+            const gridContainer = document.getElementById('selectable-menu-grid');
+            const emptyMsg = document.getElementById('no-available-menu-msg');
+            if (!catContainer || !gridContainer) return;
+
+            const categories = ['ทั้งหมด', ...new Set(availableMenus.map(m => m.category))];
+            if (!categories.includes(selectedMenuCategory)) selectedMenuCategory = 'ทั้งหมด';
+
+            catContainer.innerHTML = categories.map(cat => `
+                <button type="button" onclick="setMenuCategoryFilter('${cat}')" 
+                    class="px-3 py-1 rounded-xl text-xs font-medium transition-all ${selectedMenuCategory === cat ? 'bg-brand-500 text-white shadow-xs' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}">
+                    ${cat}
+                </button>
+            `).join('');
+
+            const displayedMenus = selectedMenuCategory === 'ทั้งหมด' 
+                ? availableMenus 
+                : availableMenus.filter(m => m.category === selectedMenuCategory);
+
+            if (displayedMenus.length === 0) {
+                gridContainer.innerHTML = '';
+                emptyMsg.classList.remove('hidden');
+                return;
+            }
+
+            emptyMsg.classList.add('hidden');
+            gridContainer.innerHTML = displayedMenus.map(item => {
+                const qty = currentCart[item.id] || 0;
+                return `
+                    <div class="p-3.5 rounded-2xl border transition-all flex flex-col justify-between gap-3 ${qty > 0 ? 'border-brand-400 bg-brand-50/40 shadow-xs' : 'border-stone-200 bg-white hover:border-brand-300'}">
+                        <div>
+                            <span class="text-[11px] font-medium text-stone-400">${escapeHtml(item.category)}</span>
+                            <h3 class="font-semibold text-stone-900 text-sm sm:text-base leading-snug mt-0.5">${escapeHtml(item.name)}</h3>
+                        </div>
+                        <div class="flex items-center justify-between pt-2 border-t border-stone-100">
+                            <span class="font-bold text-brand-600">฿${item.price.toLocaleString()}</span>
+                            ${qty === 0 ? `
+                                <button type="button" onclick="updateCartQty('${item.id}', 1)" class="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-stone-900 hover:bg-brand-600 text-white text-xs font-medium transition-colors">
+                                    <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                                    <span>เพิ่ม</span>
+                                </button>
+                            ` : `
+                                <div class="flex items-center gap-2 bg-white border border-brand-200 rounded-xl p-1 shadow-2xs">
+                                    <button type="button" onclick="updateCartQty('${item.id}', -1)" class="w-7 h-7 flex items-center justify-center rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold">-</button>
+                                    <span class="w-6 text-center text-sm font-bold text-stone-900">${qty}</span>
+                                    <button type="button" onclick="updateCartQty('${item.id}', 1)" class="w-7 h-7 flex items-center justify-center rounded-lg bg-brand-500 hover:bg-brand-600 text-white font-bold">+</button>
+                                </div>
+                            `}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            lucide.createIcons();
+        }
+
+        function updateCartQty(menuId, delta) {
+            const next = (currentCart[menuId] || 0) + delta;
+            if (next <= 0) delete currentCart[menuId];
+            else currentCart[menuId] = next;
+            renderOrderMenuSelection();
+            renderCart();
+        }
+
+        function renderCart() {
+            const container = document.getElementById('cart-items-container');
+            const totalQtyEl = document.getElementById('cart-total-qty');
+            const totalPriceEl = document.getElementById('cart-total-price');
+            if (!container) return;
+
+            const entries = Object.entries(currentCart);
+            if (entries.length === 0) {
+                container.innerHTML = `<div class="h-24 flex flex-col items-center justify-center text-stone-400 text-xs"><p>ยังไม่ได้เลือกเมนูอาหาร</p><p class="mt-0.5">กดปุ่ม "+ เพิ่ม" ที่รายการอาหารด้านซ้าย</p></div>`;
+                totalQtyEl.textContent = '0';
+                totalPriceEl.textContent = '฿0';
+                return;
+            }
+
+            let totalQty = 0;
+            let totalPrice = 0;
+
+            container.innerHTML = entries.map(([menuId, qty]) => {
+                const item = menuItems.find(m => m.id === menuId);
+                if (!item) return '';
+                const subtotal = item.price * qty;
+                totalQty += qty;
+                totalPrice += subtotal;
+
+                return `
+                    <div class="flex items-center justify-between bg-white p-2.5 rounded-xl border border-stone-200/70 text-sm">
+                        <div class="pr-2">
+                            <p class="font-medium text-stone-800 leading-tight">${escapeHtml(item.name)}</p>
+                            <p class="text-xs text-stone-500">฿${item.price} x ${qty} = <span class="font-semibold text-brand-600">฿${subtotal.toLocaleString()}</span></p>
+                        </div>
+                        <div class="flex items-center gap-1.5 shrink-0">
+                            <button type="button" onclick="updateCartQty('${menuId}', -1)" class="w-6 h-6 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 flex items-center justify-center font-bold text-xs">-</button>
+                            <span class="w-5 text-center font-semibold text-xs">${qty}</span>
+                            <button type="button" onclick="updateCartQty('${menuId}', 1)" class="w-6 h-6 rounded-lg bg-brand-100 hover:bg-brand-200 text-brand-700 flex items-center justify-center font-bold text-xs">+</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            totalQtyEl.textContent = totalQty;
+            totalPriceEl.textContent = `฿${totalPrice.toLocaleString()}`;
+        }
+
+        function resetOrderForm() {
+            currentCart = {};
+            document.getElementById('customer-name').value = '';
+            document.getElementById('order-note').value = '';
+            setQuickTime(30);
+            renderOrderMenuSelection();
+            renderCart();
+        }
+
+        async function submitNewOrder(e) {
+            e.preventDefault();
+            const entries = Object.entries(currentCart);
+            if (entries.length === 0) {
+                showToast('กรุณาเลือกเมนูอาหารอย่างน้อย 1 รายการ', 'error');
+                return;
+            }
+
+            const customerName = document.getElementById('customer-name').value.trim();
+            const deliveryTime = document.getElementById('delivery-time').value;
+            const note = document.getElementById('order-note').value.trim();
+
+            let totalPrice = 0;
+            const orderItems = entries.map(([menuId, qty]) => {
+                const menu = menuItems.find(m => m.id === menuId);
+                totalPrice += menu.price * qty;
+                return { menuId: menu.id, name: menu.name, price: menu.price, qty };
+            });
+
+            const orderNumber = `ORD-${String(orderSequence).padStart(3, '0')}`;
+            orderSequence++;
+
+            const newOrder = {
+                id: orderNumber,
+                orderDate: selectedDate || getLocalDateStr(),
+                customerName,
+                deliveryTime,
+                items: orderItems,
+                totalPrice,
+                note,
+                status: 'pending',
+                source: 'pos_owner',
+                createdAt: new Date().toISOString()
+            };
+
+            orders.unshift(newOrder);
+            await persistOrder(newOrder);
+            resetOrderForm();
+            switchTab('orders');
+            showToast(`บันทึกออเดอร์ ${orderNumber} (${customerName}) สำเร็จ!`, 'success');
+        }
+
+        // --- 11. ORDER TRACKING BOARD & SUMMARY ---
+        function setOrderFilter(filter) {
+            currentOrderFilter = filter;
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                if (btn.dataset.filter === filter) {
+                    btn.classList.add('bg-stone-900', 'text-white');
+                    btn.classList.remove('text-stone-600', 'hover:bg-stone-100');
+                } else {
+                    btn.classList.remove('bg-stone-900', 'text-white');
+                    btn.classList.add('text-stone-600', 'hover:bg-stone-100');
+                }
+            });
+            renderOrdersBoard();
+        }
+
+        async function updateOrderStatus(orderId, newStatus) {
+            const order = orders.find(o => o.id === orderId);
+            if (!order || order.status === newStatus) return;
+
+            order.status = newStatus;
+            await persistOrder(order);
+            renderOrdersBoard();
+
+            const statusInfo = ORDER_STATUSES[newStatus];
+            showToast(`อัปเดต ${order.id} เป็น "${statusInfo.label}"`, 'success');
+        }
+
+        function deleteOrder(orderId) {
+            openConfirmModal(
+                'ลบรายการออเดอร์',
+                `คุณต้องการลบออเดอร์ ${orderId} ออกจากระบบใช่หรือไม่?`,
+                async () => {
+                    orders = orders.filter(o => o.id !== orderId);
+                    await removeOrderFromStorage(orderId);
+                    renderOrdersBoard();
+                    showToast(`ลบออเดอร์ ${orderId} เรียบร้อยแล้ว`, 'info');
+                }
+            );
+        }
+
+        function clearCompletedOrders() {
+            const dateOrders = orders.filter(o => o.orderDate === selectedDate);
+            const targetOrders = dateOrders.filter(o => o.status === 'completed' || o.status === 'cancelled');
+            if (targetOrders.length === 0) {
+                showToast('ไม่มีออเดอร์ที่เสร็จสิ้นหรือยกเลิกในวันที่เลือก', 'info');
+                return;
+            }
+
+            openConfirmModal(
+                'ล้างออเดอร์ที่เสร็จสิ้นแล้ว',
+                `ต้องการลบออเดอร์ที่จัดส่งสำเร็จและยกเลิกของวันที่เลือก (${targetOrders.length} รายการ) ใช่หรือไม่?`,
+                async () => {
+                    const targetIds = targetOrders.map(o => o.id);
+                    orders = orders.filter(o => !targetIds.includes(o.id));
+                    localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+
+                    if (isFirebaseConnected && db) {
+                        const batch = db.batch();
+                        targetIds.forEach(id => batch.delete(db.collection('restaurant_orders').doc(id)));
+                        await batch.commit().catch(console.error);
+                    }
+
+                    renderAll();
+                    showToast('ล้างออเดอร์ที่เสร็จสิ้นเรียบร้อยแล้ว', 'success');
+                }
+            );
+        }
+
+        function getTimeUrgency(deliveryTimeStr, status, orderDateStr) {
+            if (status === 'completed' || status === 'cancelled' || !deliveryTimeStr) return null;
+            if (orderDateStr !== getLocalDateStr()) return null;
+
+            const now = new Date();
+            const [hh, mm] = deliveryTimeStr.split(':').map(Number);
+            const target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hh, mm, 0);
+            const diffMins = Math.round((target - now) / 60000);
+
+            if (diffMins < 0) {
+                return { label: `เลยเวลา ${Math.abs(diffMins)} นาที`, class: 'bg-red-100 text-red-700 border-red-200 animate-pulse' };
+            } else if (diffMins <= 15) {
+                return { label: `อีก ${diffMins} นาทีต้องส่ง!`, class: 'bg-amber-100 text-amber-800 border-amber-300' };
+            }
+            return null;
+        }
+
+        function renderOrdersBoard() {
+            const grid = document.getElementById('orders-grid');
+            if (!grid) return;
+
+            const dateOrders = orders.filter(o => o.orderDate === selectedDate);
+            const preparingCount = dateOrders.filter(o => o.status === 'pending' || o.status === 'cooking').length;
+            const readyCount = dateOrders.filter(o => o.status === 'ready').length;
+            const completedCount = dateOrders.filter(o => o.status === 'completed').length;
+            const activeCount = preparingCount + readyCount;
+            
+            const dailyRevenue = dateOrders
+                .filter(o => o.status !== 'cancelled')
+                .reduce((sum, o) => sum + o.totalPrice, 0);
+
+            document.getElementById('stat-preparing').textContent = preparingCount;
+            document.getElementById('stat-ready').textContent = readyCount;
+            document.getElementById('stat-completed').textContent = completedCount;
+            document.getElementById('stat-revenue').textContent = `฿${dailyRevenue.toLocaleString()}`;
+            document.getElementById('mobile-daily-sales').textContent = `฿${dailyRevenue.toLocaleString()}`;
+            document.getElementById('active-orders-badge').textContent = activeCount;
+
+            let filteredOrders = [...dateOrders];
+            if (currentOrderFilter === 'active') {
+                filteredOrders = filteredOrders.filter(o => ['pending', 'cooking', 'ready'].includes(o.status));
+            } else if (currentOrderFilter === 'completed') {
+                filteredOrders = filteredOrders.filter(o => o.status === 'completed');
+            } else if (currentOrderFilter === 'cancelled') {
+                filteredOrders = filteredOrders.filter(o => o.status === 'cancelled');
+            }
+
+            filteredOrders.sort((a, b) => a.deliveryTime.localeCompare(b.deliveryTime));
+
+            const emptyState = document.getElementById('orders-empty-state');
+            if (filteredOrders.length === 0) {
+                grid.innerHTML = '';
+                emptyState.classList.remove('hidden');
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+            grid.innerHTML = filteredOrders.map(order => {
+                const st = ORDER_STATUSES[order.status] || ORDER_STATUSES.pending;
+                const urgency = getTimeUrgency(order.deliveryTime, order.status, order.orderDate);
+                const isOnlineOrder = order.source === 'customer_online';
+
+                return `
+                    <div class="bg-white rounded-2xl border border-stone-200/90 shadow-sm overflow-hidden flex flex-col justify-between transition-all hover:shadow-md">
+                        <div class="h-1.5 w-full ${st.barClass}"></div>
+
+                        <div class="p-4 sm:p-5 space-y-4 flex-1 flex flex-col justify-between">
+                            <div class="space-y-3">
+                                <div class="flex items-start justify-between gap-2">
+                                    <div>
+                                        <div class="flex items-center flex-wrap gap-1.5">
+                                            <span class="text-xs font-bold px-2 py-0.5 rounded-md bg-stone-100 text-stone-700">${escapeHtml(order.id)}</span>
+                                            ${isOnlineOrder ? '<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-purple-100 text-purple-700">ลูกค้าสั่งเอง</span>' : ''}
+                                            <span class="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 rounded-full border ${st.badgeClass}">
+                                                ${st.dot} ${st.label}
+                                            </span>
+                                        </div>
+                                        <h3 class="text-base font-bold text-stone-900 mt-1.5 flex items-center gap-1.5">
+                                            <i data-lucide="user" class="w-4 h-4 text-stone-400 shrink-0"></i>
+                                            <span>${escapeHtml(order.customerName)}</span>
+                                        </h3>
+                                    </div>
+
+                                    <button onclick="deleteOrder('${order.id}')" class="text-stone-300 hover:text-red-500 p-1 rounded-lg transition-colors" title="ลบออเดอร์">
+                                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                    </button>
+                                </div>
+
+                                <div class="flex items-center justify-between bg-stone-50 px-3 py-2 rounded-xl border border-stone-200/70">
+                                    <div class="flex items-center gap-1.5 text-sm font-semibold text-stone-800">
+                                        <i data-lucide="clock" class="w-4 h-4 text-brand-500"></i>
+                                        <span>ส่งเวลา ${escapeHtml(order.deliveryTime)} น.</span>
+                                    </div>
+                                    ${urgency ? `<span class="text-[11px] font-bold px-2 py-0.5 rounded-md border ${urgency.class}">${urgency.label}</span>` : ''}
+                                </div>
+
+                                <div class="space-y-1.5 pt-1">
+                                    <p class="text-xs font-semibold text-stone-400 uppercase tracking-wider">รายการอาหาร</p>
+                                    <ul class="space-y-1.5 text-sm">
+                                        ${order.items.map(item => `
+                                            <li class="flex items-center justify-between text-stone-700">
+                                                <div class="flex items-center gap-2">
+                                                    <span class="font-bold text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded text-xs">x${item.qty}</span>
+                                                    <span class="font-medium">${escapeHtml(item.name)}</span>
+                                                </div>
+                                                <span class="text-stone-500 text-xs">฿${(item.price * item.qty).toLocaleString()}</span>
+                                            </li>
+                                        `).join('')}
+                                    </ul>
+                                </div>
+
+                                ${order.note ? `
+                                    <div class="bg-amber-50/80 border border-amber-200/70 rounded-xl px-3 py-2 text-xs text-amber-900 flex items-start gap-1.5">
+                                        <i data-lucide="message-square" class="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5"></i>
+                                        <span><strong>หมายเหตุ:</strong> ${escapeHtml(order.note)}</span>
+                                    </div>
+                                ` : ''}
+                            </div>
+
+                            <div class="pt-3 border-t border-stone-100 space-y-3">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs font-medium text-stone-500">ยอดรวมทั้งสิ้น</span>
+                                    <span class="text-lg font-bold text-stone-900">฿${order.totalPrice.toLocaleString()}</span>
+                                </div>
+
+                                <div>
+                                    <label class="block text-[11px] font-medium text-stone-400 mb-1">อัปเดตขั้นตอนอาหาร:</label>
+                                    <select onchange="updateOrderStatus('${order.id}', this.value)" 
+                                        class="w-full px-3 py-2 rounded-xl text-xs font-semibold border border-stone-200 bg-stone-50 hover:bg-stone-100 text-stone-800 focus:outline-none focus:ring-2 focus:ring-brand-500/30 cursor-pointer transition-colors">
+                                        <option value="pending" ${order.status === 'pending' ? 'selected' : ''}>🟡 1. รอรับออเดอร์ / รอทำ</option>
+                                        <option value="cooking" ${order.status === 'cooking' ? 'selected' : ''}>🟠 2. กำลังปรุงอาหาร</option>
+                                        <option value="ready" ${order.status === 'ready' ? 'selected' : ''}>🔵 3. รอจัดส่ง / พร้อมส่ง</option>
+                                        <option value="completed" ${order.status === 'completed' ? 'selected' : ''}>🟢 4. จัดส่งสำเร็จ</option>
+                                        <option value="cancelled" ${order.status === 'cancelled' ? 'selected' : ''}>🔴 5. ยกเลิกออเดอร์</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            lucide.createIcons();
+        }
+
+        function renderSalesSummary() {
+            const tbody = document.getElementById('menu-breakdown-tbody');
+            if (!tbody) return;
+
+            const todayStr = getLocalDateStr();
+            const isToday = selectedDate === todayStr;
+            const dateSubtitle = `${isToday ? 'วันนี้ (' : ''}${formatThaiDate(selectedDate, false)}${isToday ? ')' : ''}`;
+            document.getElementById('summary-date-subtitle').textContent = dateSubtitle;
+
+            const validOrders = orders.filter(o => o.orderDate === selectedDate && o.status !== 'cancelled');
+            let totalRevenue = 0;
+            let totalDishes = 0;
+            const menuMap = {};
+
+            validOrders.forEach(order => {
+                totalRevenue += order.totalPrice;
+                order.items.forEach(item => {
+                    totalDishes += item.qty;
+                    if (!menuMap[item.name]) {
+                        menuMap[item.name] = { name: item.name, unitPrice: item.price, qty: 0, revenue: 0 };
+                    }
+                    menuMap[item.name].qty += item.qty;
+                    menuMap[item.name].revenue += (item.price * item.qty);
+                });
+            });
+
+            const breakdownList = Object.values(menuMap).sort((a, b) => b.qty - a.qty || b.revenue - a.revenue);
+
+            document.getElementById('sum-kpi-revenue').textContent = `฿${totalRevenue.toLocaleString()}`;
+            document.getElementById('sum-kpi-orders').innerHTML = `${validOrders.length} <span class="text-sm font-normal text-stone-400">บิล</span>`;
+            document.getElementById('sum-kpi-items').innerHTML = `${totalDishes.toLocaleString()} <span class="text-sm font-normal text-stone-400">จาน/กล่อง</span>`;
+            document.getElementById('summary-menu-types-count').textContent = `${breakdownList.length} เมนู`;
+
+            if (breakdownList.length > 0) {
+                const top = breakdownList[0];
+                document.getElementById('sum-kpi-top-item').textContent = top.name;
+                document.getElementById('sum-kpi-top-qty').textContent = `ขายได้ ${top.qty} รายการ (฿${top.revenue.toLocaleString()})`;
+            } else {
+                document.getElementById('sum-kpi-top-item').textContent = '-';
+                document.getElementById('sum-kpi-top-qty').textContent = 'ยังไม่มีข้อมูลการขาย';
+            }
+
+            const tfoot = document.getElementById('menu-breakdown-tfoot');
+            if (breakdownList.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="4" class="py-10 text-center text-stone-400 text-sm">ยังไม่มีรายการอาหารที่ถูกสั่งในวันที่เลือก</td></tr>`;
+                tfoot.classList.add('hidden');
+            } else {
+                tbody.innerHTML = breakdownList.map((item, idx) => {
+                    const sharePercent = totalRevenue > 0 ? Math.round((item.revenue / totalRevenue) * 100) : 0;
+                    const rankBadge = idx === 0 
+                        ? '<span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-100 text-amber-700 text-xs font-bold mr-1.5">1</span>'
+                        : `<span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-stone-100 text-stone-500 text-xs font-medium mr-1.5">${idx + 1}</span>`;
+
+                    return `
+                        <tr class="hover:bg-stone-50/80 transition-colors">
+                            <td class="py-3 px-4">
+                                <div class="flex items-center">${rankBadge}<span class="font-medium text-stone-900">${escapeHtml(item.name)}</span></div>
+                                <div class="mt-1.5 pl-6.5 flex items-center gap-2">
+                                    <div class="flex-1 h-1.5 bg-stone-100 rounded-full overflow-hidden max-w-[140px]">
+                                        <div class="h-full bg-brand-500 rounded-full" style="width: ${sharePercent}%"></div>
+                                    </div>
+                                    <span class="text-[11px] text-stone-400">${sharePercent}%</span>
+                                </div>
+                            </td>
+                            <td class="py-3 px-3 text-right text-stone-600">฿${item.unitPrice.toLocaleString()}</td>
+                            <td class="py-3 px-3 text-center"><span class="inline-block px-2.5 py-0.5 rounded-lg bg-brand-50 text-brand-700 font-bold text-xs">${item.qty.toLocaleString()}</span></td>
+                            <td class="py-3 px-4 text-right font-bold text-stone-900">฿${item.revenue.toLocaleString()}</td>
+                        </tr>
+                    `;
+                }).join('');
+
+                document.getElementById('tfoot-total-qty').textContent = `${totalDishes.toLocaleString()} รายการ`;
+                document.getElementById('tfoot-total-revenue').textContent = `฿${totalRevenue.toLocaleString()}`;
+                tfoot.classList.remove('hidden');
+            }
+
+            renderDailyHistoryArchive();
+        }
+
+        function renderDailyHistoryArchive() {
+            const historyMap = {};
+            const todayStr = getLocalDateStr();
+
+            historyMap[todayStr] = { date: todayStr, orderCount: 0, dishCount: 0, revenue: 0 };
+            if (selectedDate) historyMap[selectedDate] = { date: selectedDate, orderCount: 0, dishCount: 0, revenue: 0 };
+
+            orders.forEach(o => {
+                if (o.status === 'cancelled') return;
+                const d = o.orderDate || todayStr;
+                if (!historyMap[d]) historyMap[d] = { date: d, orderCount: 0, dishCount: 0, revenue: 0 };
+                historyMap[d].orderCount += 1;
+                historyMap[d].revenue += o.totalPrice;
+                o.items.forEach(i => historyMap[d].dishCount += i.qty);
+            });
+
+            const historyList = Object.values(historyMap).sort((a, b) => b.date.localeCompare(a.date));
+            const historyTbody = document.getElementById('daily-history-tbody');
+
+            historyTbody.innerHTML = historyList.map(row => {
+                const isSelected = row.date === selectedDate;
+                const isToday = row.date === todayStr;
+
+                return `
+                    <tr onclick="handleDateChange('${row.date}')" 
+                        class="cursor-pointer transition-colors ${isSelected ? 'bg-brand-50/80 hover:bg-brand-50' : 'hover:bg-stone-50'}">
+                        <td class="py-3 px-4">
+                            <div class="flex items-center gap-1.5">
+                                <span class="font-semibold ${isSelected ? 'text-brand-700' : 'text-stone-800'}">${formatThaiDate(row.date, true)}</span>
+                                ${isToday ? '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">วันนี้</span>' : ''}
+                            </div>
+                            <span class="text-[11px] text-stone-400 block">${row.date}</span>
+                        </td>
+                        <td class="py-3 px-2 text-center text-stone-600 font-medium">${row.orderCount}</td>
+                        <td class="py-3 px-2 text-center text-stone-600">${row.dishCount}</td>
+                        <td class="py-3 px-4 text-right font-bold ${isSelected ? 'text-brand-600' : 'text-stone-900'}">฿${row.revenue.toLocaleString()}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function exportDailyCSV() {
+            const validOrders = orders.filter(o => o.orderDate === selectedDate && o.status !== 'cancelled');
+            if (validOrders.length === 0) {
+                showToast('ไม่มีข้อมูลยอดขายในวันที่เลือกสำหรับส่งออก', 'error');
+                return;
+            }
+
+            const menuMap = {};
+            let totalDishes = 0;
+            let totalRevenue = 0;
+
+            validOrders.forEach(order => {
+                totalRevenue += order.totalPrice;
+                order.items.forEach(item => {
+                    totalDishes += item.qty;
+                    if (!menuMap[item.name]) menuMap[item.name] = { name: item.name, price: item.price, qty: 0, revenue: 0 };
+                    menuMap[item.name].qty += item.qty;
+                    menuMap[item.name].revenue += item.price * item.qty;
+                });
+            });
+
+            const breakdownList = Object.values(menuMap).sort((a, b) => b.qty - a.qty);
+            const safeShopName = (shopSettings.name || 'ร้านอาหาร').replace(/[\\/:*?"<>|]/g, '_');
+            let csvRows = [
+                [`รายงานสรุปยอดขายร้าน ${shopSettings.name || 'ครัวคุณอิ่ม'} ประจำวันที่ ${selectedDate}`],
+                ['ลำดับ', 'รายการอาหาร', 'ราคาต่อหน่วย (บาท)', 'จำนวนที่สั่ง (จาน/กล่อง)', 'ยอดเงินรวม (บาท)']
+            ];
+
+            breakdownList.forEach((item, idx) => {
+                csvRows.push([idx + 1, `"${item.name.replace(/"/g, '""')}"`, item.price, item.qty, item.revenue]);
+            });
+            csvRows.push(['', 'รวมทั้งหมด', '', totalDishes, totalRevenue]);
+
+            const csvString = '\uFEFF' + csvRows.map(r => r.join(',')).join('\n');
+            const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `รายงานยอดขาย_${safeShopName}_${selectedDate}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            showToast(`ดาวน์โหลดรายงานวันที่ ${selectedDate} เรียบร้อยแล้ว`, 'success');
+        }
+
+        // --- 12. MODALS, TOASTS & UTILITIES ---
+        function openConfirmModal(title, message, onConfirm) {
+            document.getElementById('confirm-title').textContent = title;
+            document.getElementById('confirm-message').textContent = message;
+            confirmCallback = onConfirm;
+
+            const btn = document.getElementById('confirm-action-btn');
+            btn.onclick = () => {
+                if (confirmCallback) confirmCallback();
+                closeConfirmModal();
+            };
+
+            const modal = document.getElementById('confirm-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeConfirmModal() {
+            const modal = document.getElementById('confirm-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            confirmCallback = null;
+        }
+
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            const styles = {
+                success: 'bg-stone-900 text-white border-emerald-500/40',
+                error: 'bg-red-600 text-white border-red-400',
+                info: 'bg-stone-800 text-white border-stone-600'
+            };
+
+            const icons = {
+                success: 'check-circle-2',
+                error: 'alert-circle',
+                info: 'info'
+            };
+
+            toast.className = `pointer-events-auto flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-lg border text-sm font-medium transform transition-all duration-300 translate-y-2 opacity-0 ${styles[type] || styles.success}`;
+            toast.innerHTML = `
+                <i data-lucide="${icons[type] || 'check-circle-2'}" class="w-4 h-4 shrink-0 ${type === 'success' ? 'text-emerald-400' : ''}"></i>
+                <span>${escapeHtml(message)}</span>
+            `;
+
+            container.appendChild(toast);
+            lucide.createIcons();
+
+            requestAnimationFrame(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            });
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        function escapeHtml(str) {
+            if (typeof str !== 'string') return str;
+            return str
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+    </script>
+</body>
+</html>
